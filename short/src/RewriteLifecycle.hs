@@ -168,7 +168,7 @@ rewriteLifecycle0 spec =
         -- the crash observing roles need a g_running attribute since the
         -- crashing role will only send notifications to those listeners that
         -- are running, and thus filters on their g_running attribute.
-    let obs = concat $ map (crashHandlingRolesFor spec)
+    let obs = concatMap (crashHandlingRolesFor spec)
                            (crashableRoles spec ++ spontanousCrashers spec)
      in everywhere (mkT (f (nub $ crashableRoles spec ++ obs,
                             spontanousCrashers spec))) spec
@@ -176,7 +176,7 @@ rewriteLifecycle0 spec =
             -- FIXME kramer@acm.org reto --
             -- the "lower" use is a hack since obs = crashHandlingRolesFor ...
             -- returns the role name in small case.
-            if elem (lower name) (map lower croles)
+            if lower name `elem` map lower croles
             then rewriteRole spontanousCrash spec r
             else r
         f _ x = x
@@ -202,7 +202,7 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
                           (AS_InfixOP epos AS_Plus
                              AS_OldVal
                              (AS_Num epos 1)))]
-                crasher = if elem name spontanousCrashers
+                crasher = if name `elem` spontanousCrashers
                           then [SH_CallHandler upos (lower name)
                                  (Just $ SH_ExprWrapper upos
                                            (AS_LAND epos [
@@ -234,7 +234,7 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
                                (mk_AS_Ident "g_inbox")
                                (AS_Tuple epos []))]
                 -- let each role instance start at most once to avoid flapping
-                starter = if  elem name spontanousCrashers
+                starter = if  name `elem` spontanousCrashers
                           then [SH_CallHandler upos (lower name)
                                  (Just $ SH_ExprWrapper upos
                                            (AS_LAND epos [
@@ -271,7 +271,7 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
 addCrashStartControlConst :: SH_FL_Spec -> SH_FL_Spec
 addCrashStartControlConst spec =
     let roles = allRoles spec \\ ["GLOBAL"]
-        cs = concat $ map (\r -> mkC r crashStartControlConst) roles
+        cs = concatMap (\r -> mkC r crashStartControlConst) roles
      in spec { constant = constant spec ++ cs }
   where mkC r = map (\name -> name ++ r)
 
@@ -280,7 +280,7 @@ rewriteResetNonPersistentState spec =
     let roles = nub $ crashableRoles spec ++ spontanousCrashers spec
      in everywhere (mkT (f roles)) spec
   where f roles r@(SH_RoleDef _ name _ _) =
-            if elem (lower name) (map lower roles)
+            if lower name `elem` map lower roles
             then addResetNonPersistentState spec r
             else r
         f _ x = x

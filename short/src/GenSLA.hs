@@ -168,12 +168,12 @@ cupSep :: [String] -> String
 cupSep = seperate " \\cup "
 
 sendMC :: SH_FL_Spec -> [String] -- list of roles that send MC
-sendMC spec = nub $ concat $ map xtract $ msgDecl spec
+sendMC spec = nub $ concatMap xtract $ msgDecl spec
   where xtract (SH_MsgDecl _ s r _ _) | isTypeSet r = typeKernel s
                                       | otherwise   = []
 
 recvMC :: SH_FL_Spec -> [String] -- list of roles that recv MC
-recvMC spec = nub $ concat $ map xtract $ msgDecl spec
+recvMC spec = nub $ concatMap xtract $ msgDecl spec
   where xtract (SH_MsgDecl _ _s r _ _) | isTypeSet r = typeKernel r
                                        | otherwise   = []
 
@@ -185,7 +185,7 @@ cup template roles =
 
 generatedStateFields :: AS_Spec -> [String]
 generatedStateFields tla = nub $ everything (++) ([] `mkQ` f) tla
-  where f (AS_Ident _ _ name) | isPrefixOf "g_" name = [name]
+  where f (AS_Ident _ _ name) | "g_" `isPrefixOf` name = [name]
                               | otherwise        = []
         f _ = []
 
@@ -209,7 +209,7 @@ rewriteAnn _ _ x = x
 -- FIXME kramer@acm.org reto -- code duplication
 extractColorAnn spec =
   let allMsgAnn = filter isMsgAnn $ extractAllDisplaySLs spec
-      allColor = concat $ map colorEntry allMsgAnn
+      allColor = concatMap colorEntry allMsgAnn
       arms = map (\(mtype, SH_ExprWrapper _ e) ->
                      AS_CaseArm epos
                        (AS_InfixOP epos AS_EQ
@@ -225,12 +225,12 @@ extractColorAnn spec =
   where isColor SH_SL_MsgAnnColor = True
         isColor _ = False
         colorEntry (SH_SL_MsgAnn mtype l) =
-            concat $ map (\(k,e) -> if isColor k then [(mtype, e)] else []) l
+            concatMap (\(k,e) -> if isColor k then [(mtype, e)] else []) l
 
 -- FIXME kramer@acm.org reto -- code duplication
 extractStyleAnn spec =
   let allMsgAnn = filter isMsgAnn $ extractAllDisplaySLs spec
-      allStyle = concat $ map colorEntry allMsgAnn
+      allStyle = concatMap colorEntry allMsgAnn
       arms = map (\(mtype, SH_ExprWrapper _ e) ->
                      AS_CaseArm epos
                        (AS_InfixOP epos AS_EQ
@@ -246,7 +246,7 @@ extractStyleAnn spec =
   where isStyle SH_SL_MsgAnnStyle = True
         isStyle _ = False
         colorEntry (SH_SL_MsgAnn mtype l) =
-            concat $ map (\(k,e) -> if isStyle k then [(mtype, e)] else []) l
+            concatMap (\(k,e) -> if isStyle k then [(mtype, e)] else []) l
 
 isMsgAnn (SH_SL_MsgAnn _ _) = True
 
@@ -259,7 +259,7 @@ rewriteNames :: String -> SH_FL_Spec -> AS_Expression -> AS_Expression
 rewriteNames mtype spec = everywhere (mkT (f mtype spec))
   where f mtype spec i@(AS_Ident _ _ s) =
             let fields = allFieldsOfMsg mtype (msgDecl spec)
-             in if elem s fields
+             in if s `elem` fields
                 then AS_InfixOP epos AS_DOT  -- protect field
                          (mk_AS_Ident "msg")
                          i
@@ -267,7 +267,7 @@ rewriteNames mtype spec = everywhere (mkT (f mtype spec))
         f _ _ x = x
 
 allFieldsOfMsg :: String -> [SH_MsgDecl] -> [String]
-allFieldsOfMsg mtype l = concat $ map (allFieldsOfMsg0 mtype) l
+allFieldsOfMsg mtype l = concatMap (allFieldsOfMsg0 mtype) l
   where allFieldsOfMsg0 :: String -> SH_MsgDecl -> [String]
         allFieldsOfMsg0 mtype (SH_MsgDecl _ _ _ t l)
             | t == mtype = fieldNames l

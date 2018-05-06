@@ -125,11 +125,11 @@ wrapSLAFun globalenv (VA_FunctionDef _info _head _qbounds expr) =
        in case bind globalenv (ident "states", va_statelist) >>= \env ->
             evalE env expr of
               Right (VA_Set recset) ->
-                let l = concat $
-                        map (\r -> case r of
-                                     VA_Seq [] -> [] -- <<>> means no line
-                                     _ -> conv r)
-                          (Set.toList recset)
+                let l = concatMap
+                        (\r -> case r of
+                                 VA_Seq [] -> [] -- <<>> means no line
+                                 _ -> conv r)
+                        (Set.toList recset)
                  in l
               Left err ->
                 Trace.trace ("ERROR evaluating sla function "++show err) []
@@ -215,7 +215,7 @@ readTLA fname =
                                                 False
                                     Right _ -> True) as
                 in return $
-                     Right ([tlaspec] ++ (concat $ map (\(Right t) -> t) as'))
+                     Right ([tlaspec] ++ concatMap (\(Right t) -> t) as')
       }
 
 extractElem m f t = case Map.lookup (VA_String f) m of

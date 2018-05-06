@@ -22,7 +22,7 @@ rewriteTimer spec =
            $ rewriteTimerBoilerplate timeline_init
            $ everyLess
   where noTimers spec =
-            [] == (concat $ map (\r -> allTimers spec r) (allRoles spec))
+            [] == (concatMap (\r -> allTimers spec r) (allRoles spec))
 
 dummyI = "dummyInteraction"
 
@@ -33,7 +33,7 @@ rewriteTimerBoilerplate timeline_init spec =
                   (AS_OpHead (mk_AS_Ident "Timers") [])
                   (mk_AS_Type -- TLACodeGen, makes it conventient to express ty
                      (SH_Ty_Union upos $
-                       concat $ map (\r ->
+                       concatMap (\r ->
                                  let t = allTimers spec r
                                   in if t == []
                                      then [] -- no pair
@@ -69,7 +69,7 @@ rewriteTimerBoilerplate timeline_init spec =
                verbTLA  = b1 : b2: b3: verbTLA spec ++ [d0, b0, a0, a, b, c] }
   where genTick spec =
             let roles = allRoles spec
-             in (concat $ map (genTickBranch spec) roles)
+             in (concatMap (genTickBranch spec) roles)
                  ++ [SH_GuardedInstrList upos
                      (Just $ SH_ExprWrapper upos (mk_AS_Ident "OTHER"))
                      Nothing
@@ -170,13 +170,13 @@ updateSched role name restarted canceled =
      in SH_I_ForeignChangeState upos "GLOBAL" Nothing [a]
 
 restartedT :: [SH_Instr] -> [(AS_Expression, String)]
-restartedT l = concat $ map restartedT0 l
+restartedT l = concatMap restartedT0 l
   where restartedT0 (SH_I_Timerrestart _ (SH_ExprWrapper _ e) name) =
             [(e, name)]
         restartedT0 _ = []
 
 canceledT :: [SH_Instr] -> [String]
-canceledT l = concat $ map canceledT0 l
+canceledT l = concatMap canceledT0 l
   where canceledT0 (SH_I_Timercancel _ name) = [name]
         canceledT0 _ = []
 
@@ -217,7 +217,7 @@ rewriteEvery = everywhere (mkT f)
               let genTimers = map (\(SH_Every _ _ _ period _ ginstr) ->
                                       SH_Timer upos rname $ every period)
                                 (allEvery elems)
-                  new_elems = concat $ map (replEvery rname) elems
+                  new_elems = concatMap (replEvery rname) elems
               in SH_RoleDef upos rname vars $ new_elems ++ genTimers
           f x = x
           allEvery :: [SH_RoleElement] -> [SH_RoleElement]

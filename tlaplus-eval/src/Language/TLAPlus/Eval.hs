@@ -26,7 +26,7 @@ evalReturnEnv specs cfg =
     do{ let bindings = map (mkBinding "foospec") (cfg_constants cfg)
       ; env <- foldM (\e b -> bind e b) mkEmptyEnv bindings
       ; env' <- addBuiltIn env -- FIXME make module extend specific
-      ; let units = concat $ map unitDef specs
+      ; let units = concatMap unitDef specs
       ; (env'', vs) <- foldM evalUnitT (env', []) units
       ; return (env'', vs)
       }
@@ -587,7 +587,7 @@ op_funapp i va argv@(VA_FunArgList argvaluelist) =
     (VA_Atom _) -> throwError $ FunAppIllegalOperand e va argv
     (VA_FunctionDef _info _name qbounds expr) ->
        -- FIXME call this evalFunction(...)
-       do{ let argnames = concat $ map (\(AS_QBoundN l _e) -> l) qbounds
+       do{ let argnames = concatMap (\(AS_QBoundN l _e) -> l) qbounds
          -- Bring the outer env into scope along with qbounds bound vars of the function.
          -- This is important to let Nat get passed into the function domain (n \in Nat), as in:
          --   LET Nat == 1..3

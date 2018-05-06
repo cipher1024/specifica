@@ -23,16 +23,16 @@ theInteractionElements spec =
      in ies
 
 roleNames :: [SH_InteractionElement] -> [String]
-roleNames l = concat $ map roleNames0 l
+roleNames l = concatMap roleNames0 l
   where roleNames0 (SH_RoleDef _ name _ _) = [name]
         roleNames0 _ = []
 
 allTags :: SH_FL_Spec -> [(String, SH_RoleElement)]
 allTags spec = allTags0 $ roleDecl spec
   where allTags0 :: [Role] -> [(String, SH_RoleElement)]
-        allTags0 l = concat $ map allTags1 l
+        allTags0 l = concatMap allTags1 l
         allTags1 :: Role -> [(String, SH_RoleElement)]
-        allTags1 (SH_RoleDef _ role _ l) = concat $ map (allTags2 role) l
+        allTags1 (SH_RoleDef _ role _ l) = concatMap (allTags2 role) l
         allTags1 _ = []
         allTags2 role t@(SH_Tag _ _ _ _ _ _) = [(role, t)]
         allTags2 _ _ = []
@@ -105,10 +105,10 @@ addBoilerplate spec =
            ["SENDERS(s) == { m.sender : m \\in ALL(s) }"]
 
 dropTag :: SH_FL_Spec -> SH_FL_Spec
-dropTag spec = spec { roleDecl = concat $ map remTag (roleDecl spec) }
+dropTag spec = spec { roleDecl = concatMap remTag (roleDecl spec) }
   where remTag :: Role -> [Role]
         remTag (SH_RoleDef p name vars l) =
-            [SH_RoleDef p name vars (concat $ map remTag0 l)]
+            [SH_RoleDef p name vars (concatMap remTag0 l)]
         remTag x = [x]
         remTag0 :: SH_RoleElement -> [SH_RoleElement]
         remTag0 (SH_Tag _ _ _ _ _ _) = []
@@ -156,7 +156,7 @@ isTaggedSend :: [(String, SH_RoleElement)] -> SH_Instr -> [SH_MsgDecl]
 isTaggedSend l m@(SH_I_MsgSend1 p1 role _multi _last destexpr mtype vars) msgdecls =
     -- FIXME presumes only 1 TAG matches, could be list!
     let tags = tagsInRole role l in
-        concat $ map f tags
+        concatMap f tags
     where f t@(SH_Tag _ _tag_role tag_mtype any tag_to tag_vars) =
             if (    any
                  && elem mtype (msgTypesSendingToDestRole tag_to msgdecls))
@@ -183,7 +183,7 @@ isTaggedMsg :: [(String, SH_RoleElement)] -> SH_MsgDecl
 isTaggedMsg l (SH_MsgDecl _ from to mtype _) =
     let role = (head $ typeKernel from)
         tags = tagsInRole role l
-     in concat $ map f tags
+     in concatMap f tags
     where f (SH_Tag _ _role tag_mtype any tag_to vars) =
             if (to `eqTy` tag_to) && (any || (mtype `elem` tag_mtype))
             then map (\((t,i),_e) -> (t,i)) vars

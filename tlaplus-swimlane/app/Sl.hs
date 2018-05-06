@@ -287,12 +287,12 @@ err s = do say PError s
 main :: IO ()
 main = do argv <- getArgs
           (flags, _files) <- getOptions argv
-          if Prelude.elem Version flags
+          if Version `elem` flags
              then (do
                    putStrLn version
                    exitWith ExitSuccess)
              else return ()
-          if Prelude.elem Help flags
+          if Help `elem` flags
              then (do
                    putStrLn help
                    exitWith ExitSuccess)
@@ -344,8 +344,7 @@ main = do argv <- getArgs
                                              bindlist
                              in (i, RecE (Map.fromList m))) states
                 mel = fromJust slafun $ estates
-                playernames = List.nub $ concat $
-                                List.map (\((_,sl), (_,sl'), _) ->
+                playernames = List.nub $ concatMap (\((_,sl), (_,sl'), _) ->
                                   [sl,sl']) mel
                 suspectmel = Trace.trace ("Swimlanes = "++show playernames) $
                     List.filter (\((_i,sl), (_i',sl'), _deco) -> sl == sl') mel
@@ -434,7 +433,7 @@ main = do argv <- getArgs
                 -- nodelist _ _ = error "undefined"
                 filterstates :: [MsgExchange] -> [Swimlane] -> [Swimlane]
                 filterstates mel lanes =
-                    let idxs = concat $ List.map (\((i,sl),(i',sl'),_) ->
+                    let idxs = concatMap (\((i,sl),(i',sl'),_) ->
                                           [(i,sl), (i',sl')]) mel
                      in List.map (\swimlane -> filterlane idxs swimlane) lanes
                     where filterlane :: [(Int, SwimlaneName)] -> Swimlane
@@ -570,11 +569,11 @@ to_pstricks_swimlanes :: Maybe StateAnnFun -> Int ->
 to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
                       allstateidx sl =
     let alllanes = List.sort $ List.nub $ Prelude.map (\(s, _) -> s) sl
-     in concat (Prelude.map
+     in concatMap
                   (to_pstricks_swimlanes0 saf cycle abbrev defaultNotes m
                                           notes vertnotes alllanes
                                                 allstateidx)
-                  sl)
+                  sl
     where to_pstricks_swimlanes0 ::
             Maybe StateAnnFun -> Int ->
             Abbrev -> Bool -> Int -> StateNotes -> StateNotes ->
@@ -988,7 +987,7 @@ textToStates fc =
                          _ -> error "unspecified"
                      _ -> error "unspecified")
               $ tail e
-        st = concat $ List.map (\(l, _, _) -> l) stl
+        st = concatMap (\(l, _, _) -> l) stl
         (_, vars, _) = head stl -- all vars are the same
         (_, _, cycle) = last stl
         (errtxt, names) = case vars of
@@ -1004,7 +1003,7 @@ textToStates fc =
                  in case res of
                         SeqE values ->
                               let namevaluepairs = zip names values
-                               in concat $ List.map (\(n,v) ->
+                               in concatMap (\(n,v) ->
                                      if n=="_"
                                        then []
                                        else [Bind (Ident n) v]) namevaluepairs
@@ -1019,8 +1018,8 @@ toSwimlanes :: [State] -> Maybe StateAnnFun -> PlayerGrid -> [String] -> [Swimla
 toSwimlanes states saf grid playernames =
     let scl = List.map (\(s, s') -> (s, s', diffSL s s')) $
                 zip states (tail states)
-     in groupSL $ concat (List.map (convert (length states) saf
-                                            grid playernames) scl)
+     in groupSL $ concatMap (convert (length states) saf
+                                            grid playernames) scl
     where convert :: Int -> Maybe StateAnnFun ->
                      PlayerGrid -> [String] -> (State, State, StateChange)
                   -> [Swimlane]
@@ -1071,11 +1070,11 @@ toSwimlanes states saf grid playernames =
              where filter :: SwimlaneName -> [Swimlane] -> Swimlane
                    filter slname sll =
                        let fl = List.filter (\(sl, _grp) -> sl == slname) sll
-                           grps = concat $ List.map snd fl
+                           grps = concatMap snd fl
                         in (slname, grps)
           diffdescr :: StateChange -> [DiffDescr]
           diffdescr (_i, sc) =
-             concat $ List.map (\(_id, dg) -> dg) sc
+             concatMap (\(_id, dg) -> dg) sc
           stateAnn :: Maybe StateAnnFun -> Expr -> (String, [String])
           stateAnn Nothing _ = ("", []) -- don't care
           stateAnn (Just saf) rec =

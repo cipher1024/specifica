@@ -25,7 +25,7 @@ rewriteCont = beautifyLAND
     where f roledef@(SH_RoleDef _ rname vars elems) =
               let states = extractStates elems
                   elems' = rewriteInlineStates elems
-                  gen = concat $ map splitSections elems'
+                  gen = concatMap splitSections elems'
                   elems'' = removeHandlersWithAWAIT elems'
                in SH_RoleDef upos rname vars $ states ++ elems'' ++ gen
           f x = x
@@ -33,7 +33,7 @@ rewriteCont = beautifyLAND
 -- FIXME kramer@acm.org reto -- must include SH_Extend_Hook since at the
 -- point we do rewriteCont, the extension blocks have not been merged.
 removeHandlersWithAWAIT :: [SH_RoleElement] -> [SH_RoleElement]
-removeHandlersWithAWAIT = concat . map f
+removeHandlersWithAWAIT = concatMap f
   where f h@(SH_MsgHandler _ _ _ _ _ _ _ _ l) = if hasAwait l then [] else [h]
         f h@(SH_CallHandler _ _ _ _ _ _ l)  = if hasAwait l then [] else [h]
         f h@(SH_TimeoutHandler _ _ _ _ _ l) = if hasAwait l then [] else [h]

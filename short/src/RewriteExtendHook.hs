@@ -107,7 +107,7 @@ appendSpliceHookGIL :: SH_FL_Spec
                     -> [SH_GuardedInstrList] -> [SH_GuardedInstrList]
                     -> [SH_GuardedInstrList]
 appendSpliceHookGIL spec extil l =
-    concat $ map (appendSpliceHookGIL0 spec extil) l
+    concatMap (appendSpliceHookGIL0 spec extil) l
   where
     appendSpliceHookGIL0 :: SH_FL_Spec
                          -> [SH_GuardedInstrList] -> SH_GuardedInstrList
@@ -122,7 +122,7 @@ appendSpliceHookGIL spec extil l =
                  ) extil
     appendSpliceHookGIL0 spec extil
                          g@(SH_GuardedInstrList i guard (Just hs) l) =
-        let hextil = concat $ map (findAndSubstBindings spec) hs
+        let hextil = concatMap (findAndSubstBindings spec) hs
             h = extil ++ hextil
          in if h == []
             then [g]
@@ -147,10 +147,10 @@ substGIL l = everywhere (mkT f)
 
 splitEXT_HOOK :: SH_FL_Spec -> SH_FL_Spec
 splitEXT_HOOK spec =
-    spec { roleDecl = concat $ map splEXT_HOOK (roleDecl spec) }
+    spec { roleDecl = concatMap splEXT_HOOK (roleDecl spec) }
   where splEXT_HOOK :: Role -> [Role]
         splEXT_HOOK (SH_RoleDef p name vars l) =
-            [SH_RoleDef p name vars (concat $ map splEXT_HOOK0 l)]
+            [SH_RoleDef p name vars (concatMap splEXT_HOOK0 l)]
         splEXT_HOOK x = [x]
         splEXT_HOOK0 :: SH_RoleElement -> [SH_RoleElement]
         splEXT_HOOK0 (SH_Extend_Hook i r l gils) =
@@ -159,10 +159,10 @@ splitEXT_HOOK spec =
 
 dropEXT_HOOK :: SH_FL_Spec -> SH_FL_Spec
 dropEXT_HOOK spec =
-    spec { roleDecl = concat $ map remEXT_HOOK (roleDecl spec) }
+    spec { roleDecl = concatMap remEXT_HOOK (roleDecl spec) }
   where remEXT_HOOK :: Role -> [Role]
         remEXT_HOOK (SH_RoleDef p name vars l) =
-            [SH_RoleDef p name vars (concat $ map remEXT_HOOK0 l)]
+            [SH_RoleDef p name vars (concatMap remEXT_HOOK0 l)]
         remEXT_HOOK x = [x]
         remEXT_HOOK0 :: SH_RoleElement -> [SH_RoleElement]
         remEXT_HOOK0 (SH_Extend_Hook _ _ _ _) = []
@@ -170,7 +170,7 @@ dropEXT_HOOK spec =
 
 mergeEXT_HOOK :: SH_FL_Spec -> SH_FL_Spec
 mergeEXT_HOOK spec =
-    spec { roleDecl = concat $ map merEXT_HOOK (roleDecl spec) }
+    spec { roleDecl = concatMap merEXT_HOOK (roleDecl spec) }
   where merEXT_HOOK :: Role -> [Role]
         merEXT_HOOK (SH_RoleDef p name vars l) =
             [SH_RoleDef p name vars (merEXT_HOOK0 l)]
@@ -191,7 +191,7 @@ groupEXT_HOOK = groupBy (\a b -> sameHook a b)
         sameHook _ _ = False
 
 combineEXT_HOOK :: [[SH_RoleElement]] -> [SH_RoleElement]
-combineEXT_HOOK l = concat $ map comb l
+combineEXT_HOOK l = concatMap comb l
   where comb :: [SH_RoleElement] -> [SH_RoleElement]
         comb [] = []
         comb l@(SH_Extend_Hook _ r [SH_HookCallee _ name args] _ : _) =

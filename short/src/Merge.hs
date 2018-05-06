@@ -9,14 +9,14 @@ import Syntax
 -- thus merged.
 merge :: [SH_Concern] -> SH_Concern
 merge concerns =
-    let cels = concat $ map (\(SH_Concern _ _ l) -> l) concerns
+    let cels = concatMap (\(SH_Concern _ _ l) -> l) concerns
         constants = filter isConstant cels
         rolelists = filter isRolelist cels
         interaction = mergeInteraction $ filter isInteraction cels
      in SH_Concern upos gen $ concat [constants, rolelists, [interaction]]
 
 mergeInteraction interactions =
-    let l = concat $ map mergeInteraction0 interactions
+    let l = concatMap mergeInteraction0 interactions
         msgs = filter isMsg l
         exts = filter isMsgExt l
         roles = filter isRole l
@@ -31,8 +31,8 @@ mergeInteraction0 (SH_Interaction _ _ True {- enabled -} _roles l) = l
 mergeInteraction0 _ = []
 
 mergeRole name roles =
-    let vl = concat $ map (mergeRole0_vl name) roles
-        re = concat $ map (mergeRole0_re name) roles
+    let vl = concatMap (mergeRole0_vl name) roles
+        re = concatMap (mergeRole0_re name) roles
      in SH_RoleDef upos name vl re
 
 mergeRole0_vl name (SH_RoleDef _ n v _) | name == n = v
@@ -73,7 +73,7 @@ isVerb (SH_VerbTLAOp _ _ _ _) = True
 isVerb _ = False
 
 roleNames :: [SH_InteractionElement] -> [String]
-roleNames l = concat $ map roleNames0 l
+roleNames l = concatMap roleNames0 l
   where roleNames0 (SH_RoleDef _ name _ _) = [name]
         roleNames0 _ = []
 

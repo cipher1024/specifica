@@ -94,8 +94,7 @@ instantiateSpecificAnyHandlers spec = everywhere (mkT (f spec)) spec
                       -- into the new (elems') handlers before those are
                       -- turned back into specific handlers (clear ANY flag)
                       let elems' = map (\anyH ->
-                                          concat $
-                                             map (instantiateMsgHandler anyH)
+                                          concatMap (instantiateMsgHandler anyH)
                                                  elems) anyHList
                           l = elems ++ concat elems'
                        in SH_RoleDef upos role vars (l \\ anyHList)

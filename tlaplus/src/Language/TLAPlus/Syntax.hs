@@ -236,13 +236,12 @@ type CFG_Info = PPos.SourcePos
 
 cfg_constants :: CFG_Config -> [(CFG_Ident, CFG_Value)]
 cfg_constants (CFG_Config _name stmts) =
-    concat $
-      map (\s -> case s of
-             (CFG_ConstantDef _info l) -> concat $
-                map (\centry -> case centry of
-                       (CFG_Assignment _info ident value) -> [(ident, value)]
-                       _ -> []) l
-             _ -> []
+    concatMap (\s -> case s of
+                 (CFG_ConstantDef _info l) ->
+                     concatMap (\centry -> case centry of
+                                   (CFG_Assignment _info ident value) -> [(ident, value)]
+                                   _ -> []) l
+                 _ -> []
           ) stmts
 
 mkEmptyConfig :: CFG_Config

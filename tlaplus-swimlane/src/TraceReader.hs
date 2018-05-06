@@ -68,7 +68,7 @@ stringPathRef (SeqPosRef   i) = show i
 includesAnyPathRef :: [String] -> DiffDescr -> Bool
 includesAnyPathRef refs dd =
     let path = getPath dd
-        ref = List.find (\pr -> elem (stringPathRef pr) refs) path
+        ref = List.find (\pr -> stringPathRef pr `elem` refs) path
      in Nothing /= ref
 
 diffSL :: State -> State -> StateChange
@@ -105,7 +105,7 @@ diffRec p m m' =
       kchg = km `List.intersect` km'
    in concat [map (\k -> DRem Nothing (p++[rfr k]) (m!k)) krem,
               map (\k -> DAdd Nothing (p++[rfr k]) (m'!k)) kadd,
-              concat $ map (\k -> diffE (p++[rfr k]) (m!k) (m'!k)) kchg]
+              concatMap (\k -> diffE (p++[rfr k]) (m!k) (m'!k)) kchg]
    where rfr (Ident f) = RecFieldRef f
 
 diffMap p m m' =
@@ -116,7 +116,7 @@ diffMap p m m' =
       kchg = km `List.intersect` km'
    in concat [map (\k -> DRem Nothing (p++[mkr k]) (m!k)) krem,
               map (\k -> DAdd Nothing (p++[mkr k]) (m'!k)) kadd,
-              concat $ map (\k -> diffE (p++[mkr k]) (m!k) (m'!k)) kchg]
+              concatMap (\k -> diffE (p++[mkr k]) (m!k) (m'!k)) kchg]
    where mkr k = MapKeyRef $ ppE k Map.empty
 
 diffSet p s s' =
@@ -130,7 +130,7 @@ diffSet p s s' =
 
 diffSeq p s s' =
   if length s == length s'
-  then concat $ map (\k -> diffE (p++[spr k]) (s!!k) (s'!!k)) [0..length s-1]
+  then concatMap (\k -> diffE (p++[spr k]) (s!!k) (s'!!k)) [0..length s-1]
   else if s `List.isPrefixOf` s'
        then prefixA p s s'
        else if s `List.isSuffixOf` s'
@@ -149,7 +149,7 @@ diffSeq p s s' =
               kchg = ks `List.intersect` ks'
            in concat [map (\k -> DRem Nothing (p++[spr k]) (s!!k)) krem,
                       map (\k -> DAdd Nothing (p++[spr k]) (s'!!k)) kadd,
-                      concat $ map (\k -> diffE (p++[spr k]) (s!!k) (s'!!k))
+                      concatMap (\k -> diffE (p++[spr k]) (s!!k) (s'!!k))
                                    kchg]
         prefixA p s s' =                                  -- s  0 1 2
           let ks = [length s .. length s'-1]              -- s' 0 1 2 3 4
@@ -171,7 +171,7 @@ printPathRef (MapKeyRef   r) = "["++r++"]"
 printPathRef (SeqPosRef   r) = "["++show r++"]"
 
 printPath :: Path -> String
-printPath p = concat $ map printPathRef p
+printPath p = concatMap printPathRef p
 
 ppDL :: [DiffDescr] -> [String]
 ppDL = map ppD
