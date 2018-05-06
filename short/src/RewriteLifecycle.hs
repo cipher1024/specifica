@@ -71,7 +71,7 @@ addStutterIfNothingRunning spec =
 
 -- FIXME kramer@acm.org reto -- cop out. Should really remove this instr!
 removeSHUTDOWN :: SH_FL_Spec -> SH_FL_Spec
-removeSHUTDOWN spec = everywhere (mkT f) spec
+removeSHUTDOWN = everywhere (mkT f)
   where f (SH_GuardedInstrList info guard label l) =
             SH_GuardedInstrList info guard label (filter (not . isShutdown) l)
         isShutdown (SH_I_Shutdown upos) = True
@@ -122,7 +122,7 @@ addCrashMsgDecl spec =
      in spec { msgDecl = msgDecl spec ++ concat mlist }
 
 rewriteCrashHandlers :: SH_FL_Spec -> SH_FL_Spec
-rewriteCrashHandlers spec = everywhere (mkT f) spec
+rewriteCrashHandlers = everywhere (mkT f)
   where f (SH_CrashHandler info ann role when n id hook l) =
             let m = mkCrashMsgName n (upper role)
                 e = AS_InfixOP epos AS_DOT
@@ -141,7 +141,7 @@ mergeCrashHandlers spec = everywhere (mkT f) spec
              in SH_RoleDef upos name vars ((l \\ ch) ++ mch)
         f x = x
         groupCrashHandlers :: [SH_RoleElement] -> [[SH_RoleElement]]
-        groupCrashHandlers l = groupBy sameCrashHandler l
+        groupCrashHandlers = groupBy sameCrashHandler
           where sameCrashHandler
                  (SH_CrashHandler _ _ _ when remoteRole _ _ _)
                  (SH_CrashHandler _ _ _ when' remoteRole' _ _ _) =
@@ -157,7 +157,7 @@ mergeCrashHandlers spec = everywhere (mkT f) spec
         getGIL (SH_CrashHandler _ _ _ _ _ _ _ l) = [l]
         getGIL _ = []
         wipePos :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
-        wipePos l = everywhere (mkT f) l
+        wipePos = everywhere (mkT f)
             where f x | Typeable.typeOf x ==
                         Typeable.typeOf upos = -- i.e. is it a SourcePos?
                           upos -- make them all the same
@@ -183,7 +183,7 @@ rewriteLifecycle0 spec =
 
 rewriteRole :: [String] -> SH_FL_Spec -> SH_InteractionElement
             -> SH_InteractionElement
-rewriteRole spontanousCrashers spec ie = everywhere (mkT (f spec)) ie
+rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
   where f spec (SH_RoleDef _ name vars l) =
             let st = SH_State upos False
                        (SH_Ty_UserDef upos "BOOLEAN", "g_running")
@@ -273,7 +273,7 @@ addCrashStartControlConst spec =
     let roles = allRoles spec \\ ["GLOBAL"]
         cs = concat $ map (\r -> mkC r crashStartControlConst) roles
      in spec { constant = constant spec ++ cs }
-  where mkC r prefixes = map (\name -> name ++ r) prefixes
+  where mkC r = map (\name -> name ++ r)
 
 rewriteResetNonPersistentState :: SH_FL_Spec -> SH_FL_Spec
 rewriteResetNonPersistentState spec =
@@ -287,7 +287,7 @@ rewriteResetNonPersistentState spec =
 
 addResetNonPersistentState :: SH_FL_Spec -> SH_InteractionElement
                            -> SH_InteractionElement
-addResetNonPersistentState spec ie = everywhere (mkT (f spec)) ie
+addResetNonPersistentState spec = everywhere (mkT (f spec))
     where f spec (SH_RoleDef _ name vars l) =
               let resets = everything (++) ([] `mkQ` h) l
                   extension = SH_Extend_Hook upos
@@ -360,7 +360,7 @@ genLastActions spec name =
       in i0 ++ sends
 
 predicateWhen :: AS_Expression -> [SH_RoleElement] -> [SH_RoleElement]
-predicateWhen predicate l = everywhere (mkT (f predicate)) l
+predicateWhen predicate = everywhere (mkT (f predicate))
   where f p (SH_MsgHandler info ann r when label hook any from l) =
             SH_MsgHandler info ann r (addP p when) label hook any from l
         f p (SH_CallHandler info r when label args hook l) =
@@ -397,18 +397,18 @@ crashableRoles spec =
           startExtension spec
 
 crashHandled :: SH_FL_Spec -> [String]
-crashHandled spec = everything (++) ([] `mkQ` f) spec
+crashHandled = everything (++) ([] `mkQ` f)
     where f (SH_CrashHandler _ _ _enclrole _ rolename _ _ _) = [rolename]
           f _ = []
 
 startExtension :: SH_FL_Spec -> [String]
-startExtension spec = everything (++) ([] `mkQ` f) spec
+startExtension = everything (++) ([] `mkQ` f)
     where f (SH_RoleDef _ name _ l) = if containsStartExtension0 name l /= []
                                       then [name]
                                       else []
           f _ = []
           containsStartExtension0 :: String -> [SH_RoleElement] -> [Bool]
-          containsStartExtension0 r l = everything (++) ([] `mkQ` f r) l
+          containsStartExtension0 r = everything (++) ([] `mkQ` f r)
             where f r (SH_Extend_Hook _ _ l _) =
                       let a = any (\(SH_HookCallee _ h _) ->
                                     "hook_do_start_" ++ r == h)
@@ -417,13 +417,13 @@ startExtension spec = everything (++) ([] `mkQ` f) spec
                   f _ _ = []
 
 containsShutdown :: SH_FL_Spec -> [String]
-containsShutdown spec = everything (++) ([] `mkQ` f) spec
+containsShutdown = everything (++) ([] `mkQ` f)
     where f (SH_RoleDef _ name _ l) = if containsShutdown0 l /= []
                                       then [name]
                                       else []
           f _ = []
           containsShutdown0 :: [SH_RoleElement] -> [Bool]
-          containsShutdown0 l = everything (++) ([] `mkQ` f) l
+          containsShutdown0 = everything (++) ([] `mkQ` f)
             where f (SH_I_Shutdown _) = [True]
                   f _ = []
 
@@ -434,7 +434,7 @@ crashHandlingRolesFor spec name = everything (++) ([] `mkQ` f) spec
           f _ = []
 
 crashHandlersInRole :: String -> SH_FL_Spec -> [SH_RoleElement]
-crashHandlersInRole name spec = everything (++) ([] `mkQ` f name) spec
+crashHandlersInRole name = everything (++) ([] `mkQ` f name)
     where f name h@(SH_CrashHandler _ _ enclrole _ _rolename _ _ _)
               | enclrole == name = [h]
           f _ _ = []
@@ -444,7 +444,7 @@ mkCrashMsgName from to =
                         -- interpretation as a math subscript.
 
 prependIL :: [SH_Instr] -> [SH_GuardedInstrList] -> [SH_GuardedInstrList]
-prependIL il l = map (prependIL0 il) l
+prependIL il = map (prependIL0 il)
 
 prependIL0 :: [SH_Instr] -> SH_GuardedInstrList -> SH_GuardedInstrList
 prependIL0 il ginstr =
@@ -452,7 +452,7 @@ prependIL0 il ginstr =
      in SH_GuardedInstrList info guard label (il ++ l)
 
 appendIL :: [SH_Instr] -> [SH_GuardedInstrList] -> [SH_GuardedInstrList]
-appendIL il l = map (appendIL0 il) l
+appendIL il = map (appendIL0 il)
 
 appendIL0 :: [SH_Instr] -> SH_GuardedInstrList -> SH_GuardedInstrList
 appendIL0 il ginstr =
@@ -466,10 +466,10 @@ upper [c] = [toUpper c]
 upper (x:xs) = toUpper x : xs
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

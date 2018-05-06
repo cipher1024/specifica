@@ -33,7 +33,7 @@ ppE (StrE s)  a = "{\\tt \"" ++ shortform s a ++ "\"}"
 ppE (AtomE s) a = shortform s a
 
 ppI :: Ident -> Abbrev -> String
-ppI (Ident i) a = shortform i a
+ppI (Ident i) = shortform i
 
 shortform s abbrev =
     case Map.lookup s abbrev of

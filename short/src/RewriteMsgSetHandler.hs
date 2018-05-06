@@ -24,7 +24,7 @@ rewriteMsgSetHandler =
 
 
 glueContinue :: SH_FL_Spec -> SH_FL_Spec
-glueContinue spec = everywhere (mkT f) spec
+glueContinue = everywhere (mkT f)
     where f (SH_MsgHandler p ann role when mbind glblHooks
                True {- ANY, we've marked up the handler temporarly -}
                from ginstr) =
@@ -104,7 +104,7 @@ instantiateSpecificAnyHandlers spec = everywhere (mkT (f spec)) spec
 -- for guarded ANY handlers, add a gil leg such that the negated guard is
 -- covered also (with a pass-through 'continue')
 rewriteAnyHandlerGuard :: SH_FL_Spec -> SH_FL_Spec
-rewriteAnyHandlerGuard spec = everywhere (mkT f) spec
+rewriteAnyHandlerGuard = everywhere (mkT f)
     where f (SH_MsgHandler _ ann role when mbind glblHooks
                True    {- ANY -}
                Nothing {- No majority/all -}
@@ -148,7 +148,7 @@ instantiateMsgHandler _ _ = []
 
 addHooksIfNoBreak :: [SH_HookCaller] -> [SH_GuardedInstrList]
                   -> [SH_GuardedInstrList]
-addHooksIfNoBreak hooks l = map (addHooksIfNoBreak0 hooks) l
+addHooksIfNoBreak hooks = map (addHooksIfNoBreak0 hooks)
   where addHooksIfNoBreak0 hooks (SH_GuardedInstrList _ guard h l) =
             let h' = if hasBreak l
                      then h
@@ -168,7 +168,7 @@ rewriteDomi spec = everywhere (mkT (f spec)) spec
           f _ x = x
 
 dropBREAK :: [SH_GuardedInstrList] -> [SH_GuardedInstrList]
-dropBREAK l = map remBREAK l
+dropBREAK = map remBREAK
   where remBREAK (SH_GuardedInstrList _ guard hooks l) =
             SH_GuardedInstrList upos guard hooks (filter (not . isBREAK) l)
 
@@ -176,7 +176,7 @@ isBREAK (SH_I_Break _) = True
 isBREAK _ = False
 
 dropCONTINUE :: [SH_GuardedInstrList] -> [SH_GuardedInstrList]
-dropCONTINUE l = map remCONTINUE l
+dropCONTINUE = map remCONTINUE
   where remCONTINUE (SH_GuardedInstrList _ guard hooks l) =
             SH_GuardedInstrList upos guard hooks (filter (not . isCONTINUE) l)
         isCONTINUE (SH_I_Continue _) = True
@@ -241,7 +241,7 @@ mkHookName s = "any_hook_" ++ s
 
 addGuards :: [Maybe SH_ExprWrapper] -> [SH_GuardedInstrList]
           -> [SH_GuardedInstrList]
-addGuards guards l = map f l
+addGuards guards = map f
   where f gil@(SH_GuardedInstrList _ g hooks instrs) =
             case g of
               (Just (SH_ExprWrapper _ (AS_Ident _ _ "otherwise"))) ->
@@ -261,10 +261,10 @@ dropNothing l = let l' = filter (/= Nothing) l
                  in map (\(Just (SH_ExprWrapper _ e)) -> e) l'
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

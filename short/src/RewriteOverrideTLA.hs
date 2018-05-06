@@ -52,10 +52,10 @@ dropOverrideTLA0 = filter (not . isOverrideTLA)
         isOverrideTLA _ = False
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

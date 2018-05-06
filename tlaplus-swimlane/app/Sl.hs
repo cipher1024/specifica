@@ -516,7 +516,7 @@ type StateNotes = Map Int String
 type MsgNotes = Map (Int,Int) String
 
 toTrace :: [Expr] -> Trace
-toTrace l = Prelude.map f l
+toTrace = Prelude.map f
   where f (RecE rec) = let AtomE sl    = rec ! Ident "swimlane"
                            SetE events = rec ! Ident "events"
                         in mkE sl events
@@ -546,7 +546,7 @@ mkE swimlane exprset = EventGrp swimlane (Set.map f exprset)
          f _ = error "unspecified"
 
 numberlist :: Trace -> LabeledTrace
-numberlist l           = numberlist0 (1::Int) l
+numberlist           = numberlist0 (1::Int)
   where numberlist0 i (h:rest) = (i, h):numberlist0 (i+1) rest
         numberlist0 _ []       = []
 
@@ -743,8 +743,8 @@ to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
           erec (MultiRecvEvent  erec _ _)   = erec
 
 toBlackAndWhite :: [ColoredMessageExchange] -> [ColoredMessageExchange]
-toBlackAndWhite l = List.map (\(me, (_c,s,a,b,c,d)) ->
-                      (me, ("black", s, a,b,c,d))) l
+toBlackAndWhite = List.map (\(me, (_c,s,a,b,c,d)) ->
+                      (me, ("black", s, a,b,c,d)))
 
 type PlayerGrid = Map Int (Set String)
 
@@ -877,7 +877,7 @@ to_pstricks_graph_close args =
            "\\end{document}"]
    in psclosing ++ (if includefile config then [] else e)
 
-indent s l = Prelude.map (\line -> s++line) l
+indent s = Prelude.map (\line -> s++line)
 
 protectS :: String -> String
 protectS = protectUS
@@ -886,7 +886,7 @@ protectUS = List.map (\c -> case c of
                               _ -> c)
 
 toInteractions :: [MsgExchange] -> [ColoredMessageExchange]
-toInteractions mel = List.map convert mel
+toInteractions = List.map convert
     where convert :: MsgExchange -> ColoredMessageExchange
           convert me =
               let ((i,sl), (i',sl'), dl) = me

@@ -9,7 +9,7 @@ import Text.ParserCombinators.Parsec.Pos as PPos
 import Language.TLAPlus.Syntax as TLASyntax
 
 rewriteONCE :: SH_FL_Spec -> SH_FL_Spec
-rewriteONCE spec = everywhere (mkT f) spec
+rewriteONCE = everywhere (mkT f)
     where f roledef@(SH_RoleDef _ rname vars elems) =
               let state = map (\(SH_Once _ rname _ label _ _) ->
                                   SH_State upos False
@@ -22,9 +22,9 @@ rewriteONCE spec = everywhere (mkT f) spec
               in SH_RoleDef upos rname vars $ new_elems ++ state
           f x = x
           allONCE :: [SH_RoleElement] -> [SH_RoleElement]
-          allONCE l = filter (\e -> case e of
+          allONCE = filter (\e -> case e of
                                        (SH_Once _ _ _ _ _ _) -> True
-                                       _ -> False) l
+                                       _ -> False)
           -- No guard case
           replONCE rname (SH_Once _ role when label hooks ginstr) =
               let w = AS_LAND epos $
@@ -45,10 +45,10 @@ rewriteONCE spec = everywhere (mkT f) spec
 name_once s = "g_once_" ++ s
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

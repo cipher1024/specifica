@@ -99,7 +99,7 @@ unit = do{ l <- sepBy (choice [ -- try as cheap way to left factor identifier
          }
 
 mkIdent :: SourcePos -> [String] -> String -> AS_Expression
-mkIdent p qual name = AS_Ident (mkInfo p) qual name
+mkIdent p = AS_Ident (mkInfo p)
 
 mkInfo :: SourcePos -> AS_InfoE
 mkInfo p = (p, Nothing, Nothing)
@@ -318,14 +318,14 @@ table =
               ,prefix "INSTANCE"   (op_prefix AS_INSTANCE) ] -- ?? operator
     ]
 
-binary  name fun assoc = Infix (do{ p <- getPosition
+binary  name fun = Infix (do{ p <- getPosition
                                   ; reservedOp name;
-                                  ; return $ fun (mkInfo p) }) assoc
-binaryS name fun assoc = Infix (do{ p <- getPosition
+                                  ; return $ fun (mkInfo p) })
+binaryS name fun = Infix (do{ p <- getPosition
                                   ; reservedOp name;
                                   ; l<- try $ commaSep expressionNoAngularClose
                                   ; let fal = AS_FunArgList (mkInfo p) l
-                                  ; return $ fun (mkInfo p, fal) }) assoc
+                                  ; return $ fun (mkInfo p, fal) })
 prefix  name fun       = Prefix (do{ p <- getPosition
                                    ; reservedOp name
                                    ; return $ fun (mkInfo p) })

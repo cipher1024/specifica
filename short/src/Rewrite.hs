@@ -63,7 +63,7 @@ rewriteTag = dropTag -- tags are no longer used beyond this weave step
 -- turn small caps refences to boilerplace operators into all caps (so TLC
 -- can resolve them)
 rewriteSpecialOperators :: SH_FL_Spec -> SH_FL_Spec
-rewriteSpecialOperators spec = everywhere (mkT f) spec
+rewriteSpecialOperators = everywhere (mkT f)
   where f (AS_OpApp epos (AS_Ident a b "all") l) =
             AS_OpApp epos (AS_Ident a b "ALL") l
         f (AS_OpApp epos (AS_Ident a b "any") l) =
@@ -115,7 +115,7 @@ dropTag spec = spec { roleDecl = concat $ map remTag (roleDecl spec) }
         remTag0 x = [x]
 
 rewriteREPLY :: SH_FL_Spec -> SH_FL_Spec
-rewriteREPLY spec = everywhere (mkT f) spec
+rewriteREPLY = everywhere (mkT f)
         -- only applies to handlers of single messages (from = Nothing)
   where f (SH_MsgHandler info ann role when m label any Nothing l) =
             let l' = map (rewriteREPLY0 role m) l
@@ -123,7 +123,7 @@ rewriteREPLY spec = everywhere (mkT f) spec
         f x = x
         rewriteREPLY0 :: String -> String -> SH_GuardedInstrList
                       -> SH_GuardedInstrList
-        rewriteREPLY0 role reqm l = everywhere (mkT (g role reqm)) l
+        rewriteREPLY0 role reqm = everywhere (mkT (g role reqm))
           where g role reqm (SH_I_Reply _ restype ass) =
                     SH_I_MsgSend1 upos role -- FIXME kramer@acm.org reto --cap?
                       False
@@ -194,7 +194,7 @@ tagsInRole role l =
     map (\(_r, tag) -> tag) (filter (\(r, tag) -> lower r == lower role) l)
     -- FIXME kramer@acm.org reto -- HACK! lower since in the Send1 of
     -- some roles, the role name is capital - that's the real bug
-  where lower l = map toLower l
+  where lower = map toLower
 
 rewriteMsgExtend :: SH_FL_Spec -> SH_FL_Spec
 rewriteMsgExtend spec = everywhere (mkT (f spec)) spec
@@ -225,10 +225,10 @@ typeKernel (SH_Ty_Map _ tA tB) = typeKernel tA ++ typeKernel tB
 typeKernel (SH_Ty_Enum _ l) = l
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

@@ -158,14 +158,14 @@ genSLAFile pname spec tla =
 
 seperate :: String -> [String] -> String
 seperate _ [] = ""
-seperate x (a:[]) = a
+seperate x [a] = a
 seperate x (a:b) = a ++ x ++ seperate x b
 
 commaSep :: [String] -> String
-commaSep l = seperate ", " l
+commaSep = seperate ", "
 
 cupSep :: [String] -> String
-cupSep l = seperate " \\cup " l
+cupSep = seperate " \\cup "
 
 sendMC :: SH_FL_Spec -> [String] -- list of roles that send MC
 sendMC spec = nub $ concat $ map xtract $ msgDecl spec
@@ -251,12 +251,12 @@ extractStyleAnn spec =
 isMsgAnn (SH_SL_MsgAnn _ _) = True
 
 extractAllDisplaySLs :: SH_FL_Spec -> [SH_SL_Ann]
-extractAllDisplaySLs spec = everything (++) ([] `mkQ` f) spec
+extractAllDisplaySLs = everything (++) ([] `mkQ` f)
   where f (SH_DisplaySwimlane _ l) = l
         f _ = []
 
 rewriteNames :: String -> SH_FL_Spec -> AS_Expression -> AS_Expression
-rewriteNames mtype spec e = everywhere (mkT (f mtype spec)) e
+rewriteNames mtype spec = everywhere (mkT (f mtype spec))
   where f mtype spec i@(AS_Ident _ _ s) =
             let fields = allFieldsOfMsg mtype (msgDecl spec)
              in if elem s fields
@@ -278,10 +278,10 @@ defaultColor = "black"
 defaultStyle = "solid"
 
 -----
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

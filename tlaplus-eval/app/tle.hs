@@ -28,5 +28,5 @@ main = do
           putStrLn $ prettyPrintVA va
   where
     inlineExpr :: String -> Either ParseError AS_Expression
-    inlineExpr s =
-      runParser expression mkState "" s
+    inlineExpr =
+      runParser expression mkState ""

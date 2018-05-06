@@ -853,7 +853,7 @@ ppError _ = error "unspecified"
 type ThrowsError = Either EvalError
 
 pp :: Doc -> String
-pp d = showWidth 79 $ d
+pp = showWidth 79
   where showWidth :: Int -> Doc -> String
         showWidth w doc = displayS (renderPretty 0.9 w doc) ""
 
@@ -925,7 +925,7 @@ bif_Table = -- merge with addBuiltIn, I hate to update 2 places!
     ,(("TLC",       "Print"),       bif_Print)
     ,(("SPECIFICA", "TypeOf"),      bif_TypeOf)]
 
-mkIdent s = AS_Ident mkInfoE [] s
+mkIdent = AS_Ident mkInfoE []
 mkInfoE = mkDummyInfo  "bif-no-location"
 
 bif_BOOLEAN :: Env -> ThrowsError VA_Value

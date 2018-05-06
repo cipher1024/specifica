@@ -48,10 +48,10 @@ combineGuards  (Just (SH_ExprWrapper _ a)) (Just (SH_ExprWrapper _ b)) =
     Just $ SH_ExprWrapper upos (AS_LAND epos [a, b])
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

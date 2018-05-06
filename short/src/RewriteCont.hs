@@ -359,7 +359,7 @@ rewritePCLoc spec role guard   = everywhere (mkT (f spec role)) guard
 
 rewritePCLocGIL :: SH_FL_Spec -> String -> [SH_GuardedInstrList]
                 -> [SH_GuardedInstrList]
-rewritePCLocGIL spec role l = everywhere (mkT (f spec role)) l
+rewritePCLocGIL spec role = everywhere (mkT (f spec role))
   where f spec role (SH_GuardedInstrList info guard hook l) =
             SH_GuardedInstrList info (rewritePCLoc spec role guard) hook l
 
@@ -400,10 +400,10 @@ idxOfAwaitIn spec role hndlLabel = -- lame error handling, unknown label == -1
         hookEq s (Just l) = any (\(SH_HookCaller _ name _) -> (name == s)) l
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

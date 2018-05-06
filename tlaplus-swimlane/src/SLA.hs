@@ -250,7 +250,7 @@ extractElemString m f t =
                                  show other) []
       Nothing -> []
 
-ident s = AS_Ident (mkDummyInfo "") [] s
+ident = AS_Ident (mkDummyInfo "") []
 
 convertEtoVA :: Expr -> VA_Value
 convertEtoVA (RecE m) =

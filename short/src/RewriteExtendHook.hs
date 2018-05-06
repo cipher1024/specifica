@@ -26,7 +26,7 @@ tp :: String -> SH_FL_Spec -> SH_FL_Spec
 tp label spec = trace (">>>> " ++ label ++ prettyPrintFlatSH spec) spec
 
 pruneEmptyInstructionLists :: SH_FL_Spec -> SH_FL_Spec
-pruneEmptyInstructionLists spec = everywhere (mkT f) spec
+pruneEmptyInstructionLists = everywhere (mkT f)
     where f h@(SH_MsgHandler _ ann role when mtype glblHooks any from ginstr) =
               SH_MsgHandler upos ann role when mtype Nothing any from
                 (purgeEmpty ginstr)
@@ -49,7 +49,7 @@ pruneEmptyInstructionLists spec = everywhere (mkT f) spec
               SH_Once upos role guard label glblHooks
                 (purgeEmpty ginstr)
           f x = x
-          purgeEmpty l = filter (not . hasEmptyIL) l
+          purgeEmpty  = filter (not . hasEmptyIL)
           hasEmptyIL (SH_GuardedInstrList _ _ _ []) = True
           hasEmptyIL _ = False
 
@@ -57,7 +57,7 @@ mergeExtendHook :: SH_FL_Spec -> SH_FL_Spec
 mergeExtendHook spec = fixP mergeExtendHook0 spec
     -- note that we're clearing the hooks after the rewrite to indicate they
     -- where merged.
-    where mergeExtendHook0 spec = everywhere (mkT f) spec
+    where mergeExtendHook0 = everywhere (mkT f)
           f h@(SH_MsgHandler _ ann role when mtype glblHooks any from ginstr) =
               SH_MsgHandler upos ann role when mtype Nothing any from
                 (spliceHooks spec glblHooks ginstr)
@@ -242,7 +242,7 @@ mergeIL l =
        !!! careful, double check prim_EXTEND3 still works if fixing this.
 -}
 hackDeDup :: SH_FL_Spec -> SH_FL_Spec
-hackDeDup spec = everywhere (mkT f) spec
+hackDeDup = everywhere (mkT f)
     where f l@(SH_GuardedInstrList _ _ _ _ : _) = remDupHACK l
           f x = x
 
@@ -253,17 +253,17 @@ remDupHACK l = nub $ map remDupHACK0 (mergeIL (wipePos l))
             SH_GuardedInstrList upos g h $ nub l
 
 wipePos :: [SH_GuardedInstrList] ->  [SH_GuardedInstrList]
-wipePos l = everywhere (mkT f) l
+wipePos = everywhere (mkT f)
   where f x | Typeable.typeOf x ==
               Typeable.typeOf upos = -- i.e. is it a SourcePos?
                 upos -- make them all the same
         f x | otherwise = x
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

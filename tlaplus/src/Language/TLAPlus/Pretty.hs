@@ -332,10 +332,10 @@ op_infix :: AS_InfixOp -> AS_InfixOp
 op_infix op = op
 op_infixS :: AS_InfixOp -> AS_InfixOp
 op_infixS op = op
-binary  name op assoc = Infix   name op assoc
-binaryS name op assoc = Infix   name op assoc
-prefix  name op       = Prefix  name op
-postfix name op       = Postfix name op
+binary = Infix
+binaryS = Infix
+prefix  = Prefix  
+postfix = Postfix
 -- postfixS op           = Infix "" op AssocLeft -- MUST be Infix, used for x[y]
 
 -------------------------------------------------------------------------------

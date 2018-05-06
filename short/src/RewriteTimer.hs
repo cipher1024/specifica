@@ -212,7 +212,7 @@ appendInstr0 role name ginstr =
      in SH_GuardedInstrList info guard label (l ++ instr ++ disable)
 
 rewriteEvery :: SH_FL_Spec -> SH_FL_Spec
-rewriteEvery spec = everywhere (mkT f) spec
+rewriteEvery = everywhere (mkT f)
     where f roledef@(SH_RoleDef _ rname vars elems) =
               let genTimers = map (\(SH_Every _ _ _ period _ ginstr) ->
                                       SH_Timer upos rname $ every period)
@@ -221,9 +221,9 @@ rewriteEvery spec = everywhere (mkT f) spec
               in SH_RoleDef upos rname vars $ new_elems ++ genTimers
           f x = x
           allEvery :: [SH_RoleElement] -> [SH_RoleElement]
-          allEvery l = filter (\e -> case e of
+          allEvery = filter (\e -> case e of
                                        (SH_Every _ _ _ _ _ _) -> True
-                                       _ -> False) l
+                                       _ -> False)
           -- No guard case
           replEvery rname (SH_Every _ role Nothing period hook ginstr) =
               let i = SH_I_Timerrestart upos period (every period)
@@ -281,7 +281,7 @@ rewriteLinearStutter spec =
         f x = x
 
 appendInstrRaw :: SH_Instr -> [SH_GuardedInstrList] -> [SH_GuardedInstrList]
-appendInstrRaw instr l = map (appendInstrRaw0 instr) l
+appendInstrRaw instr = map (appendInstrRaw0 instr)
 
 appendInstrRaw0 :: SH_Instr -> SH_GuardedInstrList -> SH_GuardedInstrList
 appendInstrRaw0 instr ginstr =
@@ -424,10 +424,10 @@ hasGlobalRole spec = [] /= everything (++) ([] `mkQ` f) spec
           f _ = []
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident s = AS_Ident epos [] s
+mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos name line col = newPos name line col
+mkPos = newPos
 
 upos = mkPos "foo" 0 0
 epos = (upos, Nothing, Nothing)

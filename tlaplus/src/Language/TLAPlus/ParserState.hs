@@ -40,7 +40,7 @@ setRole st s = st { role = s }
 
 -- FIXME, is for australis/short only
 getRole :: PState -> String
-getRole st = role st
+getRole = role
 
 -- FIXME, is for australis/short only
 setInteraction :: PState -> String -> PState
@@ -48,4 +48,4 @@ setInteraction st s = st { interaction = s }
 
 -- FIXME, is for australis/short only
 getInteraction :: PState -> String
-getInteraction st = interaction st
+getInteraction = interaction
