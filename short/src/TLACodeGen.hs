@@ -39,9 +39,9 @@ gen spec name =
         singleMsgHNames = allSingleMsgHandlerNamesAsConstOp spec
         c = (map (\s -> TLA_Constant s) $ constant spec ++ singleMsgHNames) ++
             filter (\s -> case s of (TLA_Constant _) -> True
-                                    otherwise -> False) st
+                                    _ -> False) st
         v = filter (\s -> case s of (TLA_Variable _) -> True
-                                    otherwise -> False) st
+                                    _ -> False) st
         m = extractTLAMsgTypeList $ msgDecl spec -- contains msg and next els.
         verbtla = extractTLAVerbTLAList $ verbTLA spec
         -- FIXME kramer@acm.org reto -- horrible hack how lists are filtered
@@ -72,7 +72,7 @@ extractTLAStateDeclList msgDecl l =
     concat $ map (extractTLAStateDecl msgDecl) l
 
 extractTLAStateDecl :: [SH_MsgDecl] -> Role -> [TLA_GrpElement]
-extractTLAStateDecl msgDecl r@(SH_RoleDef _info role _args l) =
+extractTLAStateDecl msgDecl r@(SH_RoleDef _info role _args _l) =
     let var = mkVar role
         ty = role++"State"
         rs = if role == globalRole then [] else [role]
@@ -91,6 +91,7 @@ extractTLAStateDecl msgDecl r@(SH_RoleDef _info role _args l) =
              [TLA_Init var (initdecl role $ stateRec msgDecl r)]
             ] in
         if hasState msgDecl r then concat l else []
+extractTLAStateDecl _ _ = undefined
 
 vardecl :: [(SH_VarDecl, Maybe SH_ExprWrapper)] -> [SH_VarDecl]
 vardecl l = map ( \(a,_) -> a) l
@@ -104,9 +105,10 @@ initdecl role l =
                    [AS_QBoundN [mk_AS_Ident $ lower role]
                     (mk_AS_Ident role)]
                    (AS_RecordFunction epos (concat $ map mapsTo l)))
-  where mapsTo ((ty,i), Just (SH_ExprWrapper _ init)) =
+  where mapsTo ((_,i), Just (SH_ExprWrapper _ init)) =
             [AS_MapTo (AS_Field i) init]
-        mapsTo ((ty,i), Nothing) = []
+        mapsTo ((_,_), Nothing) = []
+        mapsTo _ = undefined
 
 stateRec :: [SH_MsgDecl] -> Role -> [(SH_VarDecl, Maybe SH_ExprWrapper)]
 stateRec msgDecl (SH_RoleDef _info role _args l) =
@@ -132,30 +134,37 @@ stateRec msgDecl (SH_RoleDef _info role _args l) =
      in if hasMsgHandler l
         then statevar ++ viewvar ++ q ++ (if doesMultiSend l then r else [])
         else statevar ++ viewvar      ++ (if doesMultiSend l then r else [])
+stateRec _ _ = undefined
 
 viewStateTypes :: Role -> [String]
-viewStateTypes  (SH_RoleDef _info role _args l) =
+viewStateTypes  (SH_RoleDef _info _role _args l) =
     concat $ map ( \(SH_ViewState _ ty _init) -> typeKernel ty )
                  (filter isViewStateDecl l)
+viewStateTypes _ = undefined
 
+typeKernel :: SH_Type -> [String]
 typeKernel (SH_Ty_UserDef _ s) = [s]
 typeKernel (SH_Ty_UserDefOrNIL _ t) = typeKernel t
-typeKernel (SH_Ty_Expr _ t) = ["anSH_Ty_Expr"]
+typeKernel (SH_Ty_Expr _ _) = ["anSH_Ty_Expr"]
 typeKernel (SH_Ty_SetOf _ t) = typeKernel t
 typeKernel (SH_Ty_SeqOf _ t) = typeKernel t
 typeKernel (SH_Ty_PairOf _ tA tB) = (typeKernel tA) ++ (typeKernel tB)
 typeKernel (SH_Ty_Map _ tA tB) = (typeKernel tA) ++ (typeKernel tB)
 typeKernel (SH_Ty_Enum _ l) = l
+typeKernel _ = undefined
 
 hasState :: [SH_MsgDecl] -> Role -> Bool
 hasState msgDecl r = stateRec msgDecl r /= []
 
-isStateDecl (SH_State _ _ vardecl init) = True
+isStateDecl :: SH_RoleElement -> Bool
+isStateDecl (SH_State _ _ _ _) = True
 isStateDecl _ = False
-isViewStateDecl (SH_ViewState _ ty init) = True
+isViewStateDecl :: SH_RoleElement -> Bool
+isViewStateDecl (SH_ViewState _ _ _) = True
 isViewStateDecl _ = False
-isTimerStateDecl (SH_Timer _ _ id) = True
-isTimerStateDecl _ = False
+-- isTimerStateDecl :: SH_RoleElement -> Bool
+-- isTimerStateDecl (SH_Timer _ _ _) = True
+-- isTimerStateDecl _ = False
 
 extractTLAMsgTypeList :: [SH_MsgDecl] -> [TLA_GrpElement]
 extractTLAMsgTypeList l = concat $ map extractTLAMsgType l
@@ -187,12 +196,12 @@ defUseOrderTLA l = foldl' g [] l
                if name `usedIn` b then LT else GT
             (AS_FunctionDef _ (AS_Ident _ [] name) _ _) ->
                if name `usedIn` b then LT else GT
-            otherwise -> trace (" >> " ++ show a ++ " <<") GT
+            _ -> trace (" >> " ++ show a ++ " <<") GT
         defUse _ _ = GT
         usedIn :: String -> AS_UnitDef -> Bool
         usedIn name unit =
             [] /= (everything (++) ([] `mkQ` (f name unit))) unit
-        f a u (AS_Ident _ [] b) =
+        f a _u (AS_Ident _ [] b) =
             if a == b
             then [True]
             else []
@@ -204,8 +213,9 @@ defUseOrderTLA l = foldl' g [] l
 -- By this time, the override is not relevant anymore, it has been resolved
 -- in a previous rewrite step.
 extractTLAVerbTLA :: VerbTLA -> [TLA_GrpElement]
-extractTLAVerbTLA m@(SH_VerbTLAOp _pos _int _override unit) =
+extractTLAVerbTLA (SH_VerbTLAOp _pos _int _override unit) =
     [TLA_AS_Wrapper unit]
+extractTLAVerbTLA _ = undefined
 
 multiMessageRolePairs :: [SH_MsgDecl] -> [(String, String)]
 multiMessageRolePairs l = map pair (filter hasSetDest l)
@@ -228,6 +238,7 @@ extractTLAAction ctx (SH_RoleDef _info role _args l) =
               mkMsgHandler ctx ann (protectSym l) role when msgtype
                                label any from instr]
         extractTLAAction0 _ _ = []
+extractTLAAction _ _ = undefined
 
 protectSym :: [SH_RoleElement] -> [String]
 protectSym l = concat $ map protectSym0 l
@@ -239,6 +250,7 @@ protectSym l = concat $ map protectSym0 l
 ---- deal with TLC's limitation of not allowing Operation forward references
 -- X prefix operation to deal with foward references
 -- http://research.microsoft.com/users/lamport/tla/PlusCal.tla
+xify :: String -> String
 xify s = "ZzZ" ++ s
 
 -- FIXME kramer@acm.org reto -- need a better name!
@@ -301,6 +313,7 @@ allSingleMsgHandlerNamesAsConstOp spec =
             ) hs
 ---- deal with TLC's limitation of not allowing Operation forward references
 
+mkCallHandler :: Ctx -> [String] -> String -> Maybe SH_ExprWrapper -> String -> [(String, String)] -> [SH_GuardedInstrList] -> AS_UnitDef
 mkCallHandler ctx protect role when label arglist gillist =
     let rs = if role == globalRole then [] else [(role, lower role)]
      in AS_OperatorDef upos
@@ -313,18 +326,18 @@ mkCallHandler ctx protect role when label arglist gillist =
 -- single destination case
 -- X prefix operation to deal with foward references
 -- http://research.microsoft.com/users/lamport/tla/PlusCal.tla
-mkMsgHandler ctx ann protect role when msgtype label any from gillist
-    | from == Nothing =
+mkMsgHandler :: Ctx -> [HandlerAnnotation] -> [String] -> String -> Maybe SH_ExprWrapper -> String -> p1 -> p2 -> Maybe (SH_FromKind, Maybe (SH_ExprWrapper, SH_WhereQuantifierKind)) -> [SH_GuardedInstrList] -> AS_UnitDef
+mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
   let inbox = AS_InfixOP epos AS_DOT
                   (AS_InfixOP epos AS_FunApp
                      (mk_AS_Ident $ mkVar role)
                      (AS_FunArgList epos [mk_AS_Ident $ lower role]))
                   (mk_AS_Ident "g_inbox")
-      chkType = [(AS_InfixOP epos AS_EQ
-                  (AS_InfixOP epos AS_DOT
-                   (AS_OpApp epos (mk_AS_Ident "Head") [inbox])
-                   (mk_AS_Ident "type"))
-                  (mk_AS_Ident $ show msgtype))]
+      -- chkType = [(AS_InfixOP epos AS_EQ
+      --             (AS_InfixOP epos AS_DOT
+      --              (AS_OpApp epos (mk_AS_Ident "Head") [inbox])
+      --              (mk_AS_Ident "type"))
+      --             (mk_AS_Ident $ show msgtype))]
       msgpos_e_sr = AS_OpApp epos (mk_AS_Ident "MsgPos")
                      [inbox,
                       AS_StringLiteral epos msgtype,
@@ -416,7 +429,7 @@ mkMsgHandler ctx ann protect role when msgtype label any from gillist
                                     core_e')
                                  ])]])))
   where mkEnabled :: (String, [(String, String)]) -> AS_Expression
-        mkEnabled (actionName, argl) =
+        mkEnabled (actionName, _argl) =
              -- last argl element is "msgpos", drop and use local_i
              AS_PrefixOP epos AS_Not
                     (AS_OpApp epos (mk_AS_Ident "ENABLED")
@@ -429,7 +442,7 @@ mkMsgHandler ctx ann protect role when msgtype label any from gillist
         -- or-ing (msgpos # 0) with the assertion expression
         defuseAssert :: AS_Expression -> AS_Expression
         defuseAssert e = everywhere (mkT f) e
-          where f a@(AS_OpApp _ (AS_Ident _ _ "Assert") (cond:rest)) =
+          where f (AS_OpApp _ (AS_Ident _ _ "Assert") (cond:rest)) =
                       AS_OpApp epos (mk_AS_Ident "Assert")
                                  ((AS_LOR epos
                                    [AS_InfixOP epos AS_NEQ
@@ -446,10 +459,10 @@ mkMsgHandler ctx ann protect role when msgtype label any from gillist
                 f (AS_OpApp _ (AS_Ident _ _ "Assert") _) =
                     AS_Bool epos True
                 f x = x
-
+-- mkMsgHandler _ctx _ann _protect _role _when _msgtype _label _any _from _gillist = undefined
 
 -- all/majority case
-mkMsgHandler ctx ann protect role when msgtype label _any (Just from) gillist =
+mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist =
   let inbox = AS_InfixOP epos AS_DOT
                   (AS_InfixOP epos AS_FunApp
                      (mk_AS_Ident $ mkVar role)
@@ -486,6 +499,7 @@ mkMsgHandler ctx ann protect role when msgtype label _any (Just from) gillist =
                        AS_InfixOP epos AS_NEQ -- don't trigger on empty view {}
                          (AS_DiscreteSet epos [])
                          view]
+                _ -> undefined
       wherePred = case from of
                     (_, Just (SH_ExprWrapper _ where_expr, quant)) ->
                         let kernel = substAS_Expr
@@ -571,13 +585,14 @@ mkMsgHandler ctx ann protect role when msgtype label _any (Just from) gillist =
                             [regular_e'])))
                          ]))
   where mkEnabled :: (String, [(String, String)]) -> AS_Expression
-        mkEnabled (actionName, argl) =
+        mkEnabled (actionName, _argl) =
              -- last argl element is "msgpos", drop and use local_i
              AS_PrefixOP epos AS_Not
                     (AS_OpApp epos (mk_AS_Ident "ENABLED")
                       [AS_OpApp epos (mk_AS_Ident actionName)
                         [mk_AS_Ident $ lower role,
                          mk_AS_Ident "local_i"]])
+-- mkMsgHandler _ctx _ann _protect _role _when _msgtype _label _any _ _gillist = undefined
 {-
   /\ (LET res ==
             {m \in Msg: \E i \in DOMAIN((st_Client[client]).g_inbox): /\ (m = (st_Client[client]).g_inbox[i]) /\ (m.type = "res")}
@@ -588,6 +603,7 @@ mkMsgHandler ctx ann protect role when msgtype label _any (Just from) gillist =
                   \A j \in js: j <= i
           res = { (st_Client[client]).g_inbox[i]: i \in is }
 -}
+mkMTypeLet :: String -> AS_Expression -> Maybe AS_Expression -> [AS_UnitDef]
 mkMTypeLet msgtype inbox view =
     let is = AS_OperatorDef upos
                (AS_OpHead (mk_AS_Ident "is") [])
@@ -646,9 +662,10 @@ findAllMsgSetRef cov gil = (nub $ (everything (++) ([] `mkQ` f)) gil) \\ cov
   where f (AS_OpApp _ (AS_Ident _ _ f) [AS_Ident _ _ mtype])
             | elem (lower f) ["all", "any", "any2", "senders"] = [mtype]
             | otherwise = []
-        f x = []
+        f _ = []
 
 -- for each ALL/ANY/SENDERS mtype found inside
+bindAllMsgSetRef :: [String] -> AS_Expression -> [SH_GuardedInstrList] -> Maybe AS_Expression -> [AS_UnitDef]
 bindAllMsgSetRef cov inbox gil view =
   let mtypes = findAllMsgSetRef cov gil
    in concat $ map (f inbox view) mtypes
@@ -660,7 +677,7 @@ mkCase ctx protect role gillist inheritedChgs =
     if (any hasCaseArm gillist)
        then let (gillist', otherArm) =
                   case gillist of
-                    [one] -> (gillist, Nothing)
+                    [_one] -> (gillist, Nothing)
                     l -> let other = last l
                              butLast = (reverse . tail . reverse) l
                           in case other of
@@ -685,28 +702,33 @@ mkCase ctx protect role gillist inheritedChgs =
        else let chgs = concat $ map (mkUnguardedInstr ctx protect role) gillist
              in grpTLA_I_ChangeList ctx (chgs++inheritedChgs)
 
+mkCaseArm :: Ctx -> [String] -> String -> [TLA_I_Change] -> SH_GuardedInstrList -> AS_CaseArm
 mkCaseArm ctx protect role inheritedChgs
-          (SH_GuardedInstrList _ guard hooks instr) =
+          (SH_GuardedInstrList _ guard _hooks instr) =
     let chgs = concat $ map (mkTLAInstr ctx protect role) instr
         is = grpTLA_I_ChangeList ctx (chgs ++ inheritedChgs)
         [g] = mkWhen protect role guard
      in AS_CaseArm epos g is
 
+mkCaseArmOther :: Ctx -> [String] -> String -> [TLA_I_Change] -> SH_GuardedInstrList -> AS_CaseArm
 mkCaseArmOther ctx protect role inheritedChgs
-          (SH_GuardedInstrList _ _ hooks instr) =
+          (SH_GuardedInstrList _ _ _hooks instr) =
     let chgs = concat $ map (mkTLAInstr ctx protect role) instr
         is = grpTLA_I_ChangeList ctx (chgs ++ inheritedChgs)
      in AS_OtherCaseArm epos is
 
+mkUnguardedInstr :: Ctx -> [String] -> String -> SH_GuardedInstrList -> [TLA_I_Change]
 mkUnguardedInstr ctx protect role (SH_GuardedInstrList _ _ _ instr) =
     concat $ map (mkTLAInstr ctx protect role) instr
 
+hasCaseArm :: SH_GuardedInstrList -> Bool
 hasCaseArm (SH_GuardedInstrList _ (Just _) _ _) = True
 hasCaseArm (SH_GuardedInstrList _ Nothing _ _) = False
 
 mkWhen :: [String] -> String -> Maybe SH_ExprWrapper -> [AS_Expression]
 mkWhen _ _ Nothing = []
 mkWhen protect role (Just (SH_ExprWrapper _ e)) = [rewriteExpr protect role e]
+mkWhen _ _ (Just _) = undefined
 
 -----
 
@@ -726,9 +748,9 @@ groupSend l =
 ---- INSTRUCTION CODE GENERATION ----------------------------------------------
 
 mkTLAInstr :: Ctx -> [String] -> String -> SH_Instr -> [TLA_I_Change]
-mkTLAInstr ctx protect role (SH_I_ChangeState _ ass) =
+mkTLAInstr _ctx protect role (SH_I_ChangeState _ ass) =
     concat $ map (mkExceptAssignment protect Nothing role) ass
-mkTLAInstr ctx protect role (SH_I_ChangeView _ viewedRole
+mkTLAInstr _ctx protect role (SH_I_ChangeView _ viewedRole
                               (SH_ExprWrapper _ e)) =
     concat $ map (mkExceptAssignment protect Nothing role)
                [SH_ExprWrapper upos
@@ -737,7 +759,7 @@ mkTLAInstr ctx protect role (SH_I_ChangeView _ viewedRole
                  e)]
 mkTLAInstr ctx protect role (SH_I_SendGroup _ l) =
   case l of
-    [SH_I_MsgSend1 _ _ False last _ _ _] -> -- 1 single destination (!) only
+    [SH_I_MsgSend1 _ _ False _last _ _ _] -> -- 1 single destination (!) only
        mkTLAInstr ctx protect role (head l)
     _ -> -- either we have multiple !, or !! or a mixture. In any case, wrap
          -- the single dest ones in a dest group (like !!) to maintain in
@@ -783,20 +805,20 @@ mkTLAInstr ctx protect role (SH_I_MsgSend1 _ _ multi last dest mtype pairs) =
      in if multi
         then [TLA_I_Change role     [mk_AS_Ident $ lower role] "g_obuf" newv]
         else [TLA_I_Change destrole [navapp]                   field  newv]
-mkTLAInstr ctx protect role (SH_I_Assert _ (SH_ExprWrapper _ e) s l) =
+mkTLAInstr _ctx protect role (SH_I_Assert _ (SH_ExprWrapper _ e) s l) =
     let l' = case l of
            Nothing -> []
            (Just x) -> x in
         [TLA_I_Assert role protect e s (map (\(SH_ExprWrapper _ x) -> x) l')]
-mkTLAInstr ctx protect role (SH_I_Let _ bindings) =
+mkTLAInstr _ctx protect role (SH_I_Let _ bindings) =
     [TLA_I_Let (map (\(s, SH_ExprWrapper _ e) ->
                         (s,rewriteExpr protect role e))
                     bindings)]
-mkTLAInstr ctx protect role (SH_I_ForeignChangeState _ foreignrole var ass) =
+mkTLAInstr _ctx protect _role (SH_I_ForeignChangeState _ foreignrole var ass) =
     concat $ map (mkExceptAssignment protect var foreignrole) ass
-mkTLAInstr ctx protect role (SH_I_FailTLAClause _) =
+mkTLAInstr _ctx _protect _role (SH_I_FailTLAClause _) =
     [TLA_I_FailTLAClause]
-mkTLAInstr ctx protect role (SH_I_Drop _ m) =
+mkTLAInstr _ctx _protect _role (SH_I_Drop _ m) =
     [TLA_I_Drop m]
 mkTLAInstr _ _ _ _ = []
 
@@ -814,7 +836,7 @@ tlaSend ctx protect role l =
                   else AS_InfixOP epos AS_Circ AS_OldVal (AS_Tuple epos els)
    in [TLA_I_Change role [mk_AS_Ident $ lower role] "g_obuf" newv]
   where
-    mkQEntry ctx protect role (SH_I_MsgSend1 _ _ multi last dest mtype pairs) =
+    mkQEntry ctx protect role (SH_I_MsgSend1 _ _ multi _last dest mtype pairs) =
       let args' = map (\(s,SH_ExprWrapper _ e) ->
                             -- view(X) handling
                           let e' = rewriteExpr protect role e in
@@ -840,6 +862,7 @@ tlaSend ctx protect role l =
                      (SH_ExprWrapper _ e) ->
                          if multi then e else AS_DiscreteSet epos [e]
        in AS_Tuple epos [msg, navapp]
+    mkQEntry _ _ _ _ = undefined
 
 isLastGasp :: SH_Instr -> Bool
 isLastGasp (SH_I_MsgSend1 _ _ _ last _ _ _) = last
@@ -851,6 +874,7 @@ mkTLAInstrMsgDef (l,_) ty =
     head $ filter (\(SH_MsgDecl _ _ _ t _) -> t == ty) l
 
 -- Straight case where assignment is to variable
+mkExceptAssignment :: Foldable t => t String -> Maybe AS_Expression -> String -> SH_ExprWrapper -> [TLA_I_Change]
 mkExceptAssignment protect var role (SH_ExprWrapper _ (AS_InfixOP _ AS_EQ
                                                        (AS_Ident _ _ s) e)) =
     let rs = if role == globalRole
@@ -863,7 +887,7 @@ mkExceptAssignment protect var role (SH_ExprWrapper _ (AS_InfixOP _ AS_EQ
 -- CHANGE map[b] = TRUE case where variable itself is an array
 -- see prim_assign1.short.
 -- This is really convenience for CHANGE map = [@ EXCEPT ![b] = TRUE]
-mkExceptAssignment protect var role (SH_ExprWrapper _
+mkExceptAssignment protect _var role (SH_ExprWrapper _
                                      (AS_InfixOP _ AS_EQ
                                       (AS_InfixOP _ AS_FunApp
                                        (AS_Ident _ _ s)
@@ -875,7 +899,7 @@ mkExceptAssignment protect var role (SH_ExprWrapper _
                      [AS_ExceptNavApp idx]
                      e]))]
 -- CHANGE foo[b,c].bar = ..., like above, but with .bar wrapped around
-mkExceptAssignment protect var role (SH_ExprWrapper _
+mkExceptAssignment protect _var role (SH_ExprWrapper _
                                      (AS_InfixOP _ AS_EQ
                                       (AS_InfixOP _ AS_DOT
                                        (AS_InfixOP _ AS_FunApp
@@ -908,10 +932,11 @@ extractTLANext (SH_RoleDef _info role _args l) =
             let rs = if role == globalRole then [] else [(role, lower role)]
              in [TLA_Next False (rs++arglist) (mkActionName label when instr)]
         extractTLANext0 role (SH_MsgHandler _ _ann _
-                                when msgtype label any from instr) =
+                                when msgtype _label _any _from instr) =
              [TLA_Next True
                 [(role, lower role)] (mkActionName msgtype when instr)]
         extractTLANext0 _ _ = []
+extractTLANext _ = undefined
 
 extractTLASpecList :: [Role] -> [TLA_GrpElement]
 extractTLASpecList l = concat $ map (\r ->
@@ -921,22 +946,26 @@ extractTLASpecList l = concat $ map (\r ->
 
 {- FIXME move these to the Syntax module and add as queries -}
 roleName :: Role -> Maybe String
-roleName (SH_RoleDef _info role _args l) = Just role
+roleName (SH_RoleDef _info role _args _l) = Just role
 roleName _ = Nothing
 
+lower :: String -> String
 lower = map toLower
 
 capFirst :: String -> String
 capFirst [] = []
 capFirst (h:rest) = toUpper h : rest
 
+isMsgHandler :: SH_RoleElement -> Bool
 isMsgHandler (SH_MsgHandler _ _ _ _ _ _ _ _ _) = True
 isMsgHandler _ = False
 
+isHandler :: SH_RoleElement -> Bool
 isHandler (SH_MsgHandler _ _ _ _ _ _ _ _ _) = True
 isHandler (SH_CallHandler _ _ _ _ _ _ _) = True
 isHandler _ = False
 
+hasMsgHandler :: [SH_RoleElement] -> Bool
 hasMsgHandler l = filter isMsgHandler l /= []
 
 isMultiSend :: SH_Instr -> Bool
@@ -964,20 +993,21 @@ doesMultiSend l = (filter isMultiSend (concat $ map listGInstr l)) /= []
 
 destRoles :: [SH_MsgDecl] -> String -> [String]
 destRoles l sendingRole =
-    let sm = filter (\(SH_MsgDecl _ s d _ _) ->
+    let sm = filter (\(SH_MsgDecl _ s _d _ _) ->
                        typeKernel s == [sendingRole]) l
      in nub $ map (\(SH_MsgDecl _ _ d _ _) -> head $ typeKernel d) sm
 
+rewriteExpr :: (Foldable t, Data a) => t String -> String -> a -> a
 rewriteExpr protect role = everywhere (mkT (f protect role))
-  where f protect "GLOBAL" i = i -- do not wrap reference inside GLOBAL role
-        f protect "global" i = i -- do not wrap reference inside GLOBAL role
+  where f _protect "GLOBAL" i = i -- do not wrap reference inside GLOBAL role
+        f _protect "global" i = i -- do not wrap reference inside GLOBAL role
         f protect role i@(AS_Ident _ _ s) | elem s protect = -- conditional rew
             AS_InfixOP epos AS_DOT                           -- if to be prot.
                   (AS_InfixOP epos AS_FunApp
                      (mk_AS_Ident $ mkVar role)
                      (AS_FunArgList epos [mk_AS_Ident $ lower role]))
                   i
-        f protect role (AS_OpApp _ (AS_Ident _ _ v) -- unconditional rewr.
+        f _protect role (AS_OpApp _ (AS_Ident _ _ v) -- unconditional rewr.
                         [(AS_Ident _ _ viewedRole)])   -- to cover view(X)
             | (v == "VIEW") || -- special operation
               (v == "view") = AS_InfixOP epos AS_DOT
@@ -985,7 +1015,7 @@ rewriteExpr protect role = everywhere (mkT (f protect role))
                                (mk_AS_Ident $ mkVar role)
                                (AS_FunArgList epos [mk_AS_Ident $ lower role]))
                               (mk_AS_Ident $ mkView viewedRole)
-        f protect role i@(AS_Ident _ _ self)
+        f _protect role (AS_Ident _ _ self)
             | (self == "SELF") || -- special variable
               (self == "self") = mk_AS_Ident $ lower role
         f _ _ x = x
@@ -1040,7 +1070,7 @@ grpTLA_I_Let l = concat $ map grpTLA_I_Let0 l
         grpTLA_I_Let0 _ = []
 
 grpTLA_ExceptAss :: Ctx -> String -> TLA_I_Change -> [AS_ExceptAssignment]
-grpTLA_ExceptAss ctx role (TLA_I_Change r nav field e) =
+grpTLA_ExceptAss _ctx role (TLA_I_Change r nav field e) =
     if role /= r
     then []
     else let nav' = if nav /= [] then [AS_ExceptNavApp nav] else [] -- GLOBAL role has no nav
@@ -1050,6 +1080,7 @@ grpTLA_ExceptAss _ _ _ = []
 grpTLA_I_AssertList :: [TLA_I_Change] -> [AS_Expression]
 grpTLA_I_AssertList l = concat $ map grpTLA_I_Assert l
 
+grpTLA_I_Assert :: TLA_I_Change -> [AS_Expression]
 grpTLA_I_Assert (TLA_I_Assert role protect e s l) =
     [AS_OpApp epos
      (mk_AS_Ident "Assert")
@@ -1063,15 +1094,18 @@ grpTLA_I_Assert _ = []
 grpTLA_I_FailList :: [TLA_I_Change] -> [AS_Expression]
 grpTLA_I_FailList l = concat $ map grpTLA_I_Fail l
 
+grpTLA_I_Fail :: TLA_I_Change -> [AS_Expression]
 grpTLA_I_Fail (TLA_I_FailTLAClause) = [mk_AS_Ident "FALSE"]
 grpTLA_I_Fail _ = []
 
 grpTLA_I_DropList :: [TLA_I_Change] -> [AS_Expression]
 grpTLA_I_DropList l = concat $ map grpTLA_I_Drop l
 
+grpTLA_I_Drop :: TLA_I_Change -> [AS_Expression]
 grpTLA_I_Drop (TLA_I_Drop _) = [mk_AS_Ident "TRUE"] -- enable inbox update
 grpTLA_I_Drop _ = []
 
+roleNamesTLA_I_Change :: [TLA_I_Change] -> [String]
 roleNamesTLA_I_Change l =
     nub $ concat $ map roleNamesTLA_I_Change0 l
   where roleNamesTLA_I_Change0 (TLA_I_Change role _ _ _) = [role]
@@ -1107,13 +1141,13 @@ genTLA0 rolePairs role l = [genTLA_Constant l,
 -- Msg == (may include references to user defined types)
 -- Role Types (incl. reference to Msg for queues)
 genTLA1 :: [(String, String)] -> [String] -> [TLA_GrpElement] -> [AS_UnitDef]
-genTLA1 rolePairs role l = [mk_AS_Separator] ++
-                           (genTLA_MsgTypeDecl l) ++ -- Msg ==
-                           [mk_AS_Separator] ++
-                           (genTLA_Wrapper l) ++ -- xState = [...] records
-                           [mk_AS_Separator,
-                            genTLA_TypeInv l,
-                            genTLA_Init l]
+genTLA1 _rolePairs _role l = [mk_AS_Separator] ++
+                             (genTLA_MsgTypeDecl l) ++ -- Msg ==
+                             [mk_AS_Separator] ++
+                             (genTLA_Wrapper l) ++ -- xState = [...] records
+                             [mk_AS_Separator,
+                              genTLA_TypeInv l,
+                              genTLA_Init l]
 
 genTLA2 :: [TLA_GrpElement] -> [AS_UnitDef]
 genTLA2 l = [mk_AS_Separator] ++
@@ -1160,6 +1194,7 @@ genTLA_TypeInv l = AS_OperatorDef upos
             [AS_InfixOP epos AS_In (mk_AS_Ident i) (mk_AS_Type sh_type)]
         mkTLA_TypeInvEntry _ = []
 
+mk_AS_Type :: SH_Type -> AS_Expression
 mk_AS_Type (SH_Ty_UserDef _ ty) = mk_AS_Ident ty
 mk_AS_Type (SH_Ty_UserDefOrNIL _ ty) =
     AS_InfixOP epos AS_Cup (mk_AS_Type ty)
@@ -1202,6 +1237,7 @@ genTLA_Fairness l =
           (AS_LAND epos (map (mkWF vars) actions))
   where mkWF vars action = AS_Fair False {-WF-} action vars
 
+mkTLA_ActionEntry :: TLA_GrpElement -> [AS_Expression]
 mkTLA_ActionEntry (TLA_Next singleMsgHndlr vartypes h) =
   let smhargs = if singleMsgHndlr
                 then [("_dummyNatT", "0")]
@@ -1231,22 +1267,24 @@ genTLA_Spec l = let vars = AS_Tuple epos
                                 (mk_AS_Ident "Next") vars))
                           ] ++ fair))
 
+mkTLA_SpecEntry :: TLA_GrpElement -> [String]
 mkTLA_SpecEntry (TLA_Spec s) = [mkVar s]
 mkTLA_SpecEntry _ = []
 
 genTLA_Wrapper :: [TLA_GrpElement] -> [AS_UnitDef]
 genTLA_Wrapper l = concat $ map genTLA_Wrapper1 l
   where genTLA_Wrapper1 (TLA_AS_Wrapper u) = [u]
-        genTLA_Wrapper1 other = []
+        genTLA_Wrapper1 _ = []
 
 -- FIXME kramer@acm.org reto -- seems very broken, does this ever get called?
+mk_AS_Expr :: SH_ExprWrapper -> AS_Expression
 mk_AS_Expr (SH_ExprWrapper _ e) = e
 mk_AS_Expr (SH_VIEW_REF _ s) = mk_AS_Ident $ "vIEW_"++s
 
 combineInfix :: AS_InfixOp -> [AS_Expression] -> AS_Expression
-combineInfix op [e] = e
-combineInfix op (h:rest) = AS_InfixOP epos op h $ combineInfix op rest
-combineInfix op [] = mk_AS_Ident "Uh"
+combineInfix _op [e] = e
+combineInfix  op (h:rest) = AS_InfixOP epos op h $ combineInfix op rest
+combineInfix _op [] = mk_AS_Ident "Uh"
 
 genTLA_Boilerplate :: [(String, String)] -> [String] -> [AS_UnitDef]
 genTLA_Boilerplate rolePairs roles =
@@ -1319,6 +1357,7 @@ genTLA_Boilerplate1 role otherRoles =
  ["                         /\\ UNCHANGED <<" ++ (mkVar r) ++ ">>" | r <- otherRoles])
 
 -- has to be generated after definition of Msg
+genTLA_BoilerplateUnconditional :: [AS_UnitDef]
 genTLA_BoilerplateUnconditional =
      [inlineOperatorDef $ unlines (
    ["Majority(q,s) ==",
@@ -1351,13 +1390,15 @@ subst pairlist s =
         subRegex (mkRegex pattern) s subst )
         s pairlist
 
+mkDeliverMsgAction :: String -> String -> String
 mkDeliverMsgAction sender receiver = sender ++ "MultiSendTo" ++ receiver
 
 substSH_Instr :: [(String, SH_ExprWrapper)] -> SH_Instr -> SH_Instr
 substSH_Instr l = everywhere (mkT f)
   where f i@(AS_Ident _ _ s) =
             case lookup s l of Nothing -> i
-                               Just w  -> case w of SH_ExprWrapper _ e -> e
+                               Just (SH_ExprWrapper _ e) -> e
+                               Just _ -> undefined
         f x = x
 
 substAS_Expr :: [(String, String)] -> AS_Expression -> AS_Expression
@@ -1370,10 +1411,13 @@ substAS_Expr l = everywhere (mkT f)
 ---- HELPER -------------------------------------------------------------------
 annSelectiveReceive :: [HandlerAnnotation] -> Bool
 annSelectiveReceive = any annSelectiveReceive0
+annSelectiveReceive0 :: HandlerAnnotation -> Bool
 annSelectiveReceive0 (HandlerAnnotation "selective_receive" []) = True
 annSelectiveReceive0 _ = False
 
+mkVar :: String -> String
 mkVar role = "st_"++role
+mkView :: String -> String
 mkView role = "g_view_"++role
 
 -- FIXME kramer@acm.org reto -- make action names unique by appending a
@@ -1386,6 +1430,7 @@ mkActionName :: String -> Maybe SH_ExprWrapper -> [SH_GuardedInstrList]
 mkActionName n guard l =   -- add instruction list into the hash mix to enable
     let g = case guard of  -- non-deterministic behaviour (actions same name)
               (Just (SH_ExprWrapper p e)) -> show p ++ show e
+              (Just _) -> undefined
               Nothing -> ""
         h = hashStr $ capFirst n ++ g ++ show l
         h' = h -- take 12 (reverse h) -- try to get away with a few bits only
@@ -1398,14 +1443,18 @@ hashStr s = case Base64.decode s of
               Nothing -> "4242" -- error $ "hashStr - argument s is: " ++ s
               Just _ -> show (SHA1.hash $ fromJust $ Base64.decode s)
 
+mk_AS_Separator :: AS_UnitDef
 mk_AS_Separator = AS_Separator upos
 
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident s = AS_Ident epos [] s
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos name line col = newPos name line col
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)
 
 ---- CTX QUERIES --------------------------------------------------------------
@@ -1417,4 +1466,5 @@ allRoleNames (_, roleDecls) = listRoleNames roleDecls
 listRoleNames :: [Role] -> [String]
 listRoleNames l = map (\(SH_RoleDef _ role _ _) -> role) l
 
+globalRole :: String
 globalRole = "GLOBAL"

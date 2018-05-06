@@ -6,8 +6,11 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+head3 :: [p] -> p
 head3 [] = error "!3"
 head3 l = head l
+
+join :: String -> [String] -> String
 
 join _sep []  = ""
 join _sep [s] = s
@@ -35,6 +38,7 @@ ppE (AtomE s) a = shortform s a
 ppI :: Ident -> Abbrev -> String
 ppI (Ident i) = shortform i
 
+shortform :: String -> Map String String -> String
 shortform s abbrev =
     case Map.lookup s abbrev of
       Nothing -> case Map.lookup "OTHERWISE" abbrev of
@@ -53,4 +57,5 @@ shortform s abbrev =
 -- box s = "\\fbox{"++s++"}"
 -- bf s = "{\\bf "++s++"}"
 -- sl s = "{\\em "++s++"}"
+color :: String -> String -> String
 color c s = "{\\color{"++c++"}"++s++"}"

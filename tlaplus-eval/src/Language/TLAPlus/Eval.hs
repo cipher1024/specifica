@@ -6,13 +6,14 @@ import Control.Monad.Except
 import Debug.Trace as Trace
 import qualified Data.Set as Set (union, intersection,
                                   isSubsetOf, empty, size, insert)
-import Data.Set as Set (fromList, toList, elems, (\\), member, isSubsetOf)
-import Data.List as List (find, elemIndex, map, elem, lookup)
+import Data.Set as Set (fromList, elems, (\\), member)
+import Data.List as List (map, lookup)
 import qualified Data.Map as Map (union, lookup, insert, empty, singleton,
-                                  keys, elems, fromList, toList)
+                                  keys, fromList, toList)
 
 import GHC.Stack
 
+import Text.Parsec.Pos
 import Text.PrettyPrint.Leijen
 
 import Language.TLAPlus.Syntax
@@ -284,6 +285,7 @@ type Prefix_Info = (AS_Expression, AS_Expression)
 type Postfix_Info = (AS_Expression, AS_Expression)
 
 
+eval_dot :: AS_InfixOp -> (Env, AS_Expression, AS_Expression, AS_Expression) -> VA_Value -> Either EvalError VA_Value
 eval_dot op loc@(env, _parent, _, b) va =
   if op == AS_DOT
     -- FIXME perhaps also check to make sure "name" is not
@@ -430,25 +432,31 @@ postfix_op_table =
   [ (AS_Prime, op_prime) ]
 
 -- infix
+op_plus :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_plus _i (VA_Int a) (VA_Int b) = return $ VA_Int $ a + b
 op_plus i va vb = throwError $ TypeMissmatch i va vb [TY_Int]
 
+op_minus :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_minus _i (VA_Int a) (VA_Int b) = return $ VA_Int $ a - b
 op_minus i va vb = throwError $ TypeMissmatch i va vb [TY_Int]
 
+op_mult :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_mult _i (VA_Int a) (VA_Int b) = return $ VA_Int $ a * b
 op_mult i va vb = throwError $ TypeMissmatch i va vb [TY_Int]
 
+op_cup :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_cup _i (VA_Set a) (VA_Set b) = return $ VA_Set $ Set.union a b
 op_cup _i (VA_Set a) b = return $ VA_Set $ Set.insert b a
 op_cup _i a@(VA_RecType _) b@(VA_RecType _) =
     return $ VA_Set $ Set.fromList [a,b]
 op_cup i va vb = throwError $ TypeMissmatch i va vb [TY_Set]
 
+op_cap :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_cap _i (VA_Set a) (VA_Set b) = return $ VA_Set $ Set.intersection a b
 op_cap i va vb = throwError $ TypeMissmatch i va vb [TY_Set]
 
 -- FIXME see book, p. 264 (comparable)
+op_eq :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_eq _i (VA_Atom a) (VA_Atom b) = return $ VA_Bool $ a == b
 op_eq _i (VA_Atom _a) _b = return $ VA_Bool False
 op_eq _i _a (VA_Atom _b) = return $ VA_Bool False
@@ -456,6 +464,7 @@ op_eq i a b = if typeOf a == typeOf b
                 then return $ VA_Bool $ a == b
                 else throwError $ TypeMissmatch i a b $ [typeOf a, typeOf b]
 
+op_neq :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_neq _i (VA_Atom a) (VA_Atom b) = return $ VA_Bool $ a /= b
 op_neq _i (VA_Atom _a) _b = return $ VA_Bool True
 op_neq _i _a (VA_Atom _b) = return $ VA_Bool True
@@ -463,22 +472,28 @@ op_neq i a b = if typeOf a == typeOf b
                  then return $ VA_Bool $ a /= b
                  else throwError $ TypeMissmatch i a b $ [typeOf a, typeOf b]
 
+op_lt :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_lt _i (VA_Int a) (VA_Int b) = return $ VA_Bool $ a < b
 op_lt i a b = throwError $ TypeMissmatch i a b $ [TY_Int]
 
+op_lteq :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_lteq _i (VA_Int a) (VA_Int b) = return $ VA_Bool $ a <= b
 op_lteq i a b = throwError $ TypeMissmatch i a b $ [TY_Int]
 
+op_gt :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_gt _i (VA_Int a) (VA_Int b) = return $ VA_Bool $ a > b
 op_gt i a b = throwError $ TypeMissmatch i a b $ [TY_Int]
 
+op_subseteq :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_subseteq _i (VA_Set a) (VA_Set b) = return $ VA_Bool $ Set.isSubsetOf a b
 op_subseteq i va vb = throwError $ TypeMissmatch i va vb [TY_Set]
 
+op_setminus :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_setminus _i (VA_Set a) (VA_Set b) = return $ VA_Set $ a \\ b
 op_setminus i va vb = throwError $ TypeMissmatch i va vb [TY_Int]
 
 -- FIXME see book, p. 264
+op_in :: MonadError EvalError m => (Env, AS_Expression, AS_Expression, AS_Expression) -> VA_Value -> VA_Value -> m VA_Value
 op_in i va (VA_Set s) =
     if s == Set.empty
     then return $ VA_Bool False
@@ -530,18 +545,23 @@ op_in i (VA_Rec vmap) (VA_RecType tmap) =
     else return $ VA_Bool False -- incl. missmatch of record keys
 op_in i va vb = throwError $ TypeMissmatch i va vb [TY_Set, TY_Seq]
 
+op_notin :: MonadError EvalError m => (Env, AS_Expression, AS_Expression, AS_Expression) -> VA_Value -> VA_Value -> m VA_Value
 op_notin i va vb = do{ VA_Bool res <- op_in i va vb
                      ; return $ VA_Bool (not res) }
 
+op_colongt :: Monad m => p -> VA_Value -> VA_Value -> m VA_Value
 op_colongt _i va vb = return $ VA_Map (Map.singleton va vb)
 
+op_atat :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_atat _i (VA_Map va) (VA_Map vb) = return $ VA_Map (Map.union va vb)
 op_atat i va vb = throwError $ TypeMissmatch i va vb [TY_Map]
 
+op_dotdot :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_dotdot _i (VA_Int a) (VA_Int b) = return $
     VA_Set $ Set.fromList (map VA_Int [a .. b])
 op_dotdot i va vb = throwError $ TypeMissmatch i va vb [TY_Int]
 
+op_dot :: MonadError EvalError m => (Env, AS_Expression, c, d) -> VA_Value -> VA_Value -> m VA_Value
 op_dot i va@(VA_Map a) vb =
     case Map.lookup vb a of
       Just v -> return v
@@ -560,14 +580,18 @@ op_dot i va@(VA_RecType a) vb@(VA_String _) = -- does TLA+ even allow this?
 op_dot _i va vb = throwError $
     Default ("Cannot apply (.) value "++show vb++" to subject "++show va)
 
+op_times :: Monad m => p -> VA_Value -> VA_Value -> m VA_Value
 op_times _i a b = return $ VA_Seq $ [a,b] -- tuples are seq of 2 elements
 
+op_and :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_and _i (VA_Bool a) (VA_Bool b) = return $ VA_Bool (a && b)
 op_and i va vb = throwError $ TypeMissmatch i va vb [TY_Bool]
 
+op_or :: MonadError EvalError m => Infix_Info -> VA_Value -> VA_Value -> m VA_Value
 op_or _i (VA_Bool a) (VA_Bool b) = return $ VA_Bool (a || b)
 op_or i va vb = throwError $ TypeMissmatch i va vb [TY_Bool]
 
+op_funapp :: (Show d, Show c) => (Env, AS_Expression, c, d) -> VA_Value -> VA_Value -> Either EvalError VA_Value
 op_funapp i va argv@(VA_FunArgList argvaluelist) =
   let (env, e, _ea, _eb) = i in
   case va of
@@ -626,6 +650,7 @@ op_funapp i va argv = throwError $ Default ("op_funapp i="++show i++
                                             ", // argv="++prettyPrintVA argv)
 
 -- prefix
+op_subset :: MonadError EvalError m => (AS_Expression, AS_Expression) -> VA_Value -> m VA_Value
 op_subset _i (VA_Set s) = let l   = Set.elems s
                               pl  = powerset $ l
                               pl' = map (\l -> VA_Set $ Set.fromList l) pl
@@ -633,6 +658,7 @@ op_subset _i (VA_Set s) = let l   = Set.elems s
 op_subset i v = let (e, a) = i
                  in throwError $ IllegalType e a v TY_Set "prefix expression"
 
+op_domain :: MonadError EvalError m => (AS_Expression, AS_Expression) -> VA_Value -> m VA_Value
 op_domain _i (VA_Seq l) =
     return $ VA_Set $ Set.fromList $ map (\i -> VA_Int i) [1 .. length l]
 op_domain _i (VA_Map m) =
@@ -640,6 +666,7 @@ op_domain _i (VA_Map m) =
 op_domain i v = let (e, a) = i
                  in throwError $ IllegalType e a v TY_Seq "prefix expression"
 
+op_union :: MonadError EvalError m => (AS_Expression, AS_Expression) -> VA_Value -> m VA_Value
 op_union i (VA_Set s) =
     if s == Set.empty
       then return $ VA_Set Set.empty
@@ -675,17 +702,21 @@ op_union i (VA_Set s) =
 op_union i v = let (e, a) = i
                 in throwError $ IllegalType e a v TY_Set "UNION expression"
 
+op_not :: MonadError EvalError m => (AS_Expression, AS_Expression) -> VA_Value -> m VA_Value
 op_not _i (VA_Bool b) = return $ VA_Bool$ not b
 op_not i v = let (e, a) = i
               in throwError $ IllegalType e a v TY_Bool "negation expression"
 
 -- postfix
+op_prime :: Monad m => p -> a -> m a
 op_prime _i a = return a -- FIXME, noop for now
 
 -- FIXME I should not need this, rewrite the AST
+op_closefunapp :: Monad m => p -> a -> m a
 op_closefunapp _i a =  return a -- noop
 
 --
+evalOperator :: (Env, [AS_Expression], [AS_Expression], AS_Expression) -> ThrowsError VA_Value
 evalOperator(env, argnames, exprargs, expr) =
     if length argnames == 0
        then evalET env expr
@@ -857,6 +888,7 @@ pp = showWidth 79
   where showWidth :: Int -> Doc -> String
         showWidth w doc = displayS (renderPretty 0.9 w doc) ""
 
+trapError :: (Show a, MonadError a m) => m String -> m String
 trapError action = catchError action (return . show)
 
 extractValue :: HasCallStack => ThrowsError a -> a
@@ -871,6 +903,7 @@ type Env = [Binding] -- one env per module
 type Id = ([String], String)
 type Binding = (Id, VA_Value) -- add module qualifiers
 
+mkEmptyEnv :: [a]
 mkEmptyEnv = []
 
 bind :: Env -> (AS_Expression, VA_Value) -> ThrowsError Env
@@ -917,6 +950,7 @@ addBuiltIn e =
 
 -- evalE uses this table for BIFs, the BIF itself does not carry the function
 -- because then Syntax would have a
+bif_Table :: [(([Char], [Char]), Env -> ThrowsError VA_Value)]
 bif_Table = -- merge with addBuiltIn, I hate to update 2 places!
     [(("TLA+", "BOOLEAN"), bif_BOOLEAN)
     ,(("FiniteSet", "Cardinality"), bif_Cardinality)
@@ -925,7 +959,9 @@ bif_Table = -- merge with addBuiltIn, I hate to update 2 places!
     ,(("TLC",       "Print"),       bif_Print)
     ,(("SPECIFICA", "TypeOf"),      bif_TypeOf)]
 
+mkIdent :: String -> AS_Expression
 mkIdent = AS_Ident mkInfoE []
+mkInfoE :: (SourcePos, Maybe a1, Maybe a2)
 mkInfoE = mkDummyInfo  "bif-no-location"
 
 bif_BOOLEAN :: Env -> ThrowsError VA_Value

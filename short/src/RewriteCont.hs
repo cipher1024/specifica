@@ -8,8 +8,7 @@ import Data.Generics
 import Data.List(elemIndex)
 import Syntax
 import Flatten
-import Debug.Trace(trace)
-import RewriteLifecycle(appendIL, predicateWhen)
+import RewriteLifecycle(predicateWhen)
 import RewriteTimer(every)
 import TLACodeGen(mk_AS_Type)
 import Text.ParserCombinators.Parsec.Pos as PPos
@@ -22,7 +21,7 @@ rewriteCont = beautifyLAND
              . rewritePCLocationGuards -- do this _before_ await is broken out
                                       -- since that step looses the @hooks
                                       -- on the await statements
-    where f roledef@(SH_RoleDef _ rname vars elems) =
+    where f (SH_RoleDef _ rname vars elems) =
               let states = extractStates elems
                   elems' = rewriteInlineStates elems
                   gen = concatMap splitSections elems'
@@ -55,6 +54,7 @@ splitSections h@(SH_Once _ _ _ _ _ l)           = split0 h l
 splitSections _ = [] -- all other elements (e.g. STATE) are present in elems'
                      -- already, avoid duplicating!
 
+split0 :: SH_RoleElement -> [SH_GuardedInstrList] -> [SH_RoleElement]
 split0 ha l
   | hasAwait l =
       let pc = label ha
@@ -71,6 +71,7 @@ split0 ha l
        in predicateWhen rootG [ha'] ++ [seqState] ++ newH
   | otherwise = [] -- included in rewriteCont/f already, do not duplicate
 
+replGILs :: SH_RoleElement -> [SH_GuardedInstrList] -> SH_RoleElement
 replGILs (SH_MsgHandler info ann role when mtype label any from _) l =
     SH_MsgHandler info ann role when mtype label any from l
 replGILs (SH_CallHandler info role when label args hook _) l =
@@ -83,6 +84,7 @@ replGILs (SH_Every info role when period hook _) l =
     SH_Every info role when period hook l
 replGILs (SH_Once info role when label hook _) l =
     SH_Once info role when label hook l
+replGILs _ _ = undefined
 
 splitGIL :: String -> [SH_GuardedInstrList]
          -> ([SH_GuardedInstrList], [SH_RoleElement])
@@ -92,7 +94,7 @@ splitGIL pc l =
    in (gils', res)
   where splitGIL0 :: String -> SH_GuardedInstrList
                   -> (SH_GuardedInstrList, [SH_Instr])
-        splitGIL0 pc gil@(SH_GuardedInstrList _ guard hooks l)
+        splitGIL0 _pc gil@(SH_GuardedInstrList _ guard hooks l)
             | any isAwait l =
                 let l1 = takeWhile (not . isAwait) l
                     l2 = dropWhile (not . isAwait) l
@@ -103,21 +105,21 @@ splitGIL pc l =
         f :: String -> Int -> (SH_GuardedInstrList, [SH_Instr])
           -> (Int, SH_GuardedInstrList, [SH_RoleElement])
         f pc i (gil, il)
-            | il /= [] = let sections = chop isAwait il []
-                             rels = map
-                                      (g pc (i+length sections))
-                                      (zip [i+1..1+i+length sections] sections)
-                             goto = SH_I_ChangeState upos
-                                      [SH_ExprWrapper upos
-                                        (AS_InfixOP epos AS_EQ
-                                          (mk_AS_Ident $ mkPC pc)
-                                          (AS_Num epos (i+1)))]
-                             SH_GuardedInstrList info guard hooks l = gil
-                             gil' = SH_GuardedInstrList info guard hooks
-                                      (l ++ [goto])
-                          in (i+length sections,
-                              gil', rels)
-            | il == [] = (i, gil, [])
+            | null il   = (i, gil, [])
+            | otherwise = let sections = chop isAwait il []
+                              rels = map
+                                       (g pc (i+length sections))
+                                       (zip [i+1..1+i+length sections] sections)
+                              goto = SH_I_ChangeState upos
+                                       [SH_ExprWrapper upos
+                                         (AS_InfixOP epos AS_EQ
+                                           (mk_AS_Ident $ mkPC pc)
+                                           (AS_Num epos (i+1)))]
+                              SH_GuardedInstrList info guard hooks l = gil
+                              gil' = SH_GuardedInstrList info guard hooks
+                                       (l ++ [goto])
+                           in (i+length sections,
+                               gil', rels)
            where g :: String -> Int -> (Int, Section SH_Instr)
                   -> SH_RoleElement
                  g root last (n,(await, il)) =
@@ -142,7 +144,7 @@ roll :: [(SH_GuardedInstrList, [SH_Instr])] -- parts
          -> (Int, SH_GuardedInstrList, [SH_RoleElement]) ) -- f
      -> [(SH_GuardedInstrList, [SH_RoleElement])] -- acc
      -> ([SH_GuardedInstrList], [SH_RoleElement])
-roll []                i f acc =
+roll []                _i _f acc =
     let (gils, rels) = unzip acc
      in (gils, concat rels)
 roll ((gil, il):rest) i f acc =
@@ -157,38 +159,38 @@ hasAwait = any hasAwait0
           where f (SH_I_Await _ _) = [True]
                 f _ = []
 
-splitSectionsH :: SH_RoleElement -> SH_GuardedInstrList -> [SH_RoleElement]
-splitSectionsH h gil =
-  if hasAwait [gil]
-  then let SH_GuardedInstrList _ _guard _hooks il = gil
-           -- root handler h is wrapped in an await for uniformity
-           sections = chop test ([SH_I_Await upos (injectIL_H h [])] ++ il) []
-           handlers = map (f (label h) -- name of the root handler for PC_...
-                             (length sections - 1))
-                          (zip [0..length sections] sections)
-           sequencerState = SH_State upos False
-                              (SH_Ty_UserDef upos
-                               ("(0.." ++ show (length sections - 1) ++ ")"),
-                               mkPC (label h))
-                              (Just $ SH_ExprWrapper upos (AS_Num epos 0))
-        in [sequencerState] ++ handlers
-  else [] -- do not add handlers, keep existing one
-  where f :: String -> Int -> (Int, Section SH_Instr) -> SH_RoleElement
-        f root last (n,(await, il)) =
-            let SH_I_Await _ handler = await
-                guard = AS_InfixOP epos AS_EQ
-                          (mk_AS_Ident $ mkPC root)
-                          (AS_Num epos n)
-                [handler'] = predicateWhen guard [handler]
-                nextPC = if n == last then 0 else n + 1
-                upSeq = SH_I_ChangeState upos
-                          [SH_ExprWrapper upos
-                           (AS_InfixOP epos AS_EQ
-                            (mk_AS_Ident $ mkPC root)
-                            (AS_Num epos nextPC))]
-             in injectIL_H handler' (il ++ [upSeq])
-        test (SH_I_Await _ _) = True
-        test _ = False
+-- splitSectionsH :: SH_RoleElement -> SH_GuardedInstrList -> [SH_RoleElement]
+-- splitSectionsH h gil =
+--   if hasAwait [gil]
+--   then let SH_GuardedInstrList _ _guard _hooks il = gil
+--            -- root handler h is wrapped in an await for uniformity
+--            sections = chop test ([SH_I_Await upos (injectIL_H h [])] ++ il) []
+--            handlers = map (f (label h) -- name of the root handler for PC_...
+--                              (length sections - 1))
+--                           (zip [0..length sections] sections)
+--            sequencerState = SH_State upos False
+--                               (SH_Ty_UserDef upos
+--                                ("(0.." ++ show (length sections - 1) ++ ")"),
+--                                mkPC (label h))
+--                               (Just $ SH_ExprWrapper upos (AS_Num epos 0))
+--         in [sequencerState] ++ handlers
+--   else [] -- do not add handlers, keep existing one
+--   where f :: String -> Int -> (Int, Section SH_Instr) -> SH_RoleElement
+--         f root last (n,(await, il)) =
+--             let SH_I_Await _ handler = await
+--                 guard = AS_InfixOP epos AS_EQ
+--                           (mk_AS_Ident $ mkPC root)
+--                           (AS_Num epos n)
+--                 [handler'] = predicateWhen guard [handler]
+--                 nextPC = if n == last then 0 else n + 1
+--                 upSeq = SH_I_ChangeState upos
+--                           [SH_ExprWrapper upos
+--                            (AS_InfixOP epos AS_EQ
+--                             (mk_AS_Ident $ mkPC root)
+--                             (AS_Num epos nextPC))]
+--              in injectIL_H handler' (il ++ [upSeq])
+--         test (SH_I_Await _ _) = True
+--         test _ = False
 
 type Section a = (a, [a])
 -- assumes (test $ head l), i.e. the first element in the list is a header
@@ -199,7 +201,7 @@ chop test l acc = case chop0 test (head l) (tail l) [] of
                     (section, rest)  -> chop test rest (acc ++ [section])
 
 chop0 :: Eq a => (a -> Bool) -> a -> [a] -> [a] -> (Section a, [a])
-chop0 test head []         acc             = ((head, acc), [])
+chop0 _test head []         acc            = ((head, acc), [])
 chop0 test head l@(h:rest) acc | test h    = ((head, acc), l)
                                | otherwise = chop0 test head rest (acc ++ [h])
 
@@ -239,9 +241,10 @@ injectIL_H (SH_Every info role when period hook [gil]) l =
     SH_Every info role when period hook [replaceIL_G gil l]
 injectIL_H (SH_Once info role when label hook [gil]) l =
     SH_Once info role when label hook [replaceIL_G gil l]
+injectIL_H _ _ = undefined
 
 replaceIL_G :: SH_GuardedInstrList -> [SH_Instr] -> SH_GuardedInstrList
-replaceIL_G (SH_GuardedInstrList info guard hook il) l =
+replaceIL_G (SH_GuardedInstrList info guard hook _il) l =
     SH_GuardedInstrList info guard hook l -- replace il with l
 
 beautifyLAND :: SH_FL_Spec -> SH_FL_Spec
@@ -271,16 +274,18 @@ extractStates = everything (++) ([] `mkQ` f)
   where f (SH_I_State _p s) = [initDefault s]
         f _ = []
         -- initialize the state to the default value for the type
-        initDefault (SH_State p1 per v@(ty, var)
-                       (Just (SH_ExprWrapper p2 init))) =
+        initDefault (SH_State p1 per v@(ty, _var)
+                       (Just (SH_ExprWrapper p2 _init))) =
             SH_State p1 per v (Just (SH_ExprWrapper p2
                                          (typeDefaultValue ty)))
+        initDefault _ = undefined
 
+typeDefaultValue :: SH_Type -> AS_Expression
 typeDefaultValue (SH_Ty_UserDef _ s) = typeDefaultValueUserDef s
-typeDefaultValue (SH_Ty_UserDefOrNIL _ t) = mk_AS_Ident "NIL"
-typeDefaultValue (SH_Ty_Expr _ t) = mk_AS_Ident "Outsch_need_type_inference"
-typeDefaultValue (SH_Ty_SetOf _ t) = AS_DiscreteSet epos []
-typeDefaultValue (SH_Ty_SeqOf _ t) = AS_Tuple epos []
+typeDefaultValue (SH_Ty_UserDefOrNIL _ _t) = mk_AS_Ident "NIL"
+typeDefaultValue (SH_Ty_Expr _ _t) = mk_AS_Ident "Outsch_need_type_inference"
+typeDefaultValue (SH_Ty_SetOf _ _t) = AS_DiscreteSet epos []
+typeDefaultValue (SH_Ty_SeqOf _ _t) = AS_Tuple epos []
 typeDefaultValue (SH_Ty_PairOf _ tA tB) = AS_Tuple epos [ typeDefaultValue tA
                                                         , typeDefaultValue tB ]
 typeDefaultValue (SH_Ty_Map _ tA tB) = AS_QuantifierBoundFunction epos
@@ -289,7 +294,9 @@ typeDefaultValue (SH_Ty_Map _ tA tB) = AS_QuantifierBoundFunction epos
                                        (typeDefaultValue tB)
 typeDefaultValue (SH_Ty_Enum _ l) = mk_AS_Ident (show $ head l)
 -- FIXME kramer@acm.org reto -- add SH_Ty_Union support
+typeDefaultValue _ = undefined
 
+typeDefaultValueUserDef :: String -> AS_Expression
 typeDefaultValueUserDef "BOOLEAN" = AS_Bool epos False
 typeDefaultValueUserDef "Nat" = AS_Num epos 0
 -- turn this into TypeDefaultValue("SomeType") such that I can let users write
@@ -300,7 +307,7 @@ typeDefaultValueUserDef unknown =
 
 rewriteInlineStates :: [SH_RoleElement] -> [SH_RoleElement]
 rewriteInlineStates = everywhere (mkT f)
-  where f (SH_I_State _ (SH_State _ _ (ty, v)
+  where f (SH_I_State _ (SH_State _ _ (_ty, v)
                              (Just (SH_ExprWrapper _ init)))) =
             SH_I_ChangeState upos
               [SH_ExprWrapper upos
@@ -309,6 +316,7 @@ rewriteInlineStates = everywhere (mkT f)
                 init)]
         f x = x
 
+mkPC :: String -> String
 mkPC id = "g_pc" ++ "_" ++ id
 
 label :: SH_RoleElement -> String
@@ -318,6 +326,7 @@ label (SH_TimeoutHandler _ _ _ id _ _)    = id
 label (SH_CrashHandler _ _ _ _ _ id _ _)    = id
 label (SH_Every _ _ _ period _ _)         = every period
 label (SH_Once _ _ _ label _ _)           = label
+label _ = undefined
 
 -- FIXME kramer@acm.org reto -- also rewrite guards in GILs!
 rewritePCLocationGuards :: SH_FL_Spec -> SH_FL_Spec
@@ -346,8 +355,8 @@ rewritePCLocationGuards spec = everywhere (mkT (f spec)) spec
 
 rewritePCLoc :: SH_FL_Spec -> String -> Maybe SH_ExprWrapper
                     -> Maybe SH_ExprWrapper
-rewritePCLoc spec role Nothing = Nothing
-rewritePCLoc spec role guard   = everywhere (mkT (f spec role)) guard
+rewritePCLoc _spec _role Nothing = Nothing
+rewritePCLoc spec role guard     = everywhere (mkT (f spec role)) guard
   where f spec role i@(AS_Ident _ _ name) =
             case break (=='@') name of
               (_,[]) -> i -- no @ present
@@ -355,6 +364,7 @@ rewritePCLoc spec role guard   = everywhere (mkT (f spec role)) guard
                   AS_InfixOP epos AS_EQ
                     (mk_AS_Ident $ mkPC root)
                     (mk_AS_Ident $ idxOfAwaitIn spec role label)
+              _ -> undefined
         f _ _ x = x
 
 rewritePCLocGIL :: SH_FL_Spec -> String -> [SH_GuardedInstrList]
@@ -369,8 +379,8 @@ rewritePCLocGIL spec role = everywhere (mkT (f spec role))
 -- really lame error handling in case the label used in the guard isn't found
 -- in the spec.
 idxOfAwaitIn :: SH_FL_Spec -> String -> String -> String
-idxOfAwaitIn spec role "init" = "0" -- convention
-idxOfAwaitIn spec role hndlLabel = -- lame error handling, unknown label == -1
+idxOfAwaitIn _spec _role "init" = "0" -- convention
+idxOfAwaitIn spec _role hndlLabel = -- lame error handling, unknown label == -1
     let allGILs = everything (++) ([] `mkQ` f) spec
         bl = map (\l -> map (g hndlLabel) l) allGILs
         fl = filter (\l -> not $ all (\x -> case x of
@@ -388,7 +398,7 @@ idxOfAwaitIn spec role hndlLabel = -- lame error handling, unknown label == -1
         --   if @label matches, Just False otherwise
         -- any statement other than await, creates Nothing
         g :: String -> SH_Instr -> Maybe Bool
-        g hndlLabel a@(SH_I_Await _ h) = Just $ isHandlerLabeled hndlLabel h
+        g hndlLabel (SH_I_Await _ h) = Just $ isHandlerLabeled hndlLabel h
         g _ _ = Nothing
         isHandlerLabeled ho (SH_MsgHandler _ _ _ _ _ h _ _ _) = hookEq ho h
         isHandlerLabeled ho (SH_CallHandler _ _ _ _ _ h _)  = hookEq ho h
@@ -396,14 +406,18 @@ idxOfAwaitIn spec role hndlLabel = -- lame error handling, unknown label == -1
         isHandlerLabeled ho (SH_CrashHandler _ _ _ _ _ _ h _) = hookEq ho h
         isHandlerLabeled ho (SH_Every _ _ _ _ h _)          = hookEq ho h
         isHandlerLabeled ho (SH_Once _ _ _ _ h _)           = hookEq ho h
-        hookEq s Nothing = False
+        isHandlerLabeled _ _ = undefined
+        hookEq _ Nothing = False
         hookEq s (Just l) = any (\(SH_HookCaller _ name _) -> (name == s)) l
 
 ---- HELPER -------------------------------------------------------------------
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

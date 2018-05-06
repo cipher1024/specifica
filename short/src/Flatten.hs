@@ -1,9 +1,8 @@
 module Flatten where
 
 import Data.Generics
-import Data.Map as Map hiding (map)
 import Syntax
-import SyntaxPretty (ppInteractionElement, ppMsgDecl, ppConcernElement)
+import SyntaxPretty (ppInteractionElement, ppMsgDecl)
 
 import Text.PrettyPrint.Leijen as PPrint
 
@@ -22,7 +21,7 @@ data SH_FL_Spec = SH_FL_Spec { msgDecl :: [SH_MsgDecl],
                   deriving (Eq, Ord, Show, Data, Typeable)
 
 insideOut :: SH_Concern -> SH_FL_Spec
-insideOut con@(SH_Concern _ _ l) =
+insideOut (SH_Concern _ _ l) =
     let a = concatMap cSH_MsgDecl l
         b = concatMap cSH_MsgExt l
         c = concatMap cSH_RoleDef l -- FIXME merge roles of same name!
@@ -75,6 +74,7 @@ cSH_Const :: SH_ConcernElement -> [String]
 cSH_Const (SH_Constant _ l) = l
 cSH_Const _ = []
 
+prettyPrintFlatSH :: SH_FL_Spec -> String
 prettyPrintFlatSH spec =
     showWidth 79 $ ppFlatSH spec
   where showWidth :: Int -> Doc -> String

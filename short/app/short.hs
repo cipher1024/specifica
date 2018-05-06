@@ -2,17 +2,15 @@
 
 module Main where
 
-import Data.Char (toLower)
+import Data.Either
+
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
-import System.IO (hFlush, stdout)
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Language (emptyDef)
 
 import Language.TLAPlus.Pretty (prettyPrintAS)
 
-import Flatten (SH_FL_Spec(..), insideOut, prettyPrintFlatSH)
+import Flatten (insideOut, prettyPrintFlatSH)
 import Merge (merge)
 import Parser (mkState, shortspec)
 import Rewrite (rewriteSpecialOperators, rewriteTag)
@@ -34,15 +32,10 @@ main :: IO ()
 main = do
   snames <- getArgs
   l <- mapM readAndParse snames
-  let e =
-        filter
-          (\case
-               (Left err) -> True
-               _ -> False)
-          l
+  let (e,l') = partitionEithers l
   if not (null e)
     then do
-      let (Left err) = head e
+      let err = head e
       putStrLn ("ERROR: " ++ show err)
       exitFailure
     else do
@@ -51,9 +44,9 @@ main = do
         (\(Right (SH_Spec name cl)) ->
            putStrLn $ prettyPrintSH $ SH_Spec name cl)
         l
-      let l' = concatMap (\(Right (SH_Spec name cl)) -> cl) l
-      let merged = merge l'
-      let (Right (SH_Spec pname _)) = head l
+      let l'' = concatMap (\(SH_Spec _name cl) -> cl) l'
+      let merged = merge l''
+      let (SH_Spec pname _) = head l'
       putStrLn "--------"
       putStrLn ""
       putStrLn ""

@@ -1,8 +1,6 @@
 module ParserHelper where
 
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Language( emptyDef )
 import Text.ParserCombinators.Parsec.Pos as PPos
 import Language.TLAPlus.Parser( mkState, operatorDef, expression )
 import Language.TLAPlus.Syntax
@@ -21,10 +19,13 @@ inlineExpr s =
           Right ast -> ast
           Left err -> mk_AS_Ident $ show err
 
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

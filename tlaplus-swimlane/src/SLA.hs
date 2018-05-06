@@ -1,27 +1,22 @@
 module SLA (readSLA) where
 
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Language( emptyDef )
 
 import Language.TLAPlus.Parser( tlaspec, cfgspec, mkState )
 import Language.TLAPlus.Syntax
-import Language.TLAPlus.Pretty( prettyPrintAS, prettyPrintVA,
-                                prettyPrintVATeX,
-                                prettyPrintE, prettyPrintCFG )
+import Language.TLAPlus.Pretty(prettyPrintVA, prettyPrintVATeX)
+
+
 import Language.TLAPlus.Eval
 import TraceReader
 import Parser (Expr(..), Ident(..))
-import qualified Data.Map as Map (map, toList, fromList, keys)
-import Data.Map as Map (lookup)
+import qualified Data.Map as Map
+import Data.Map as Map (Map,lookup)
 import qualified Data.Set as Set (map, toList)
 
 import Debug.Trace as Trace
-import System.IO (hPutStrLn, stderr)
 import Control.Exception (catch)
 import System.IO.Error (ioError, isDoesNotExistError)
-import System.Environment
-import System.Exit
 
 readSLA :: String -> IO (Either String (Maybe StateAnnFun, Maybe SLAFun))
 readSLA fname =
@@ -218,6 +213,7 @@ readTLA fname =
                      Right ([tlaspec] ++ concatMap (\(Right t) -> t) as')
       }
 
+extractElem :: Map VA_Value VA_Value -> String -> (String -> a) -> [a]
 extractElem m f t = case Map.lookup (VA_String f) m of
                        -- NOTE label can be a
                        -- string, record or tuple
@@ -233,6 +229,7 @@ extractElem m f t = case Map.lookup (VA_String f) m of
                          ("Warning, unknow result type "++show other) []
                        Nothing -> []
 
+extractElemSet :: Map VA_Value VA_Value -> String -> ([String] -> a) -> [a]
 extractElemSet m f t = case Map.lookup (VA_String f) m of
                          Just (VA_Set s) -> -- Set of String expected!
                              [t $ map (\(VA_String s) -> s) (Set.toList s)]
@@ -241,6 +238,7 @@ extractElemSet m f t = case Map.lookup (VA_String f) m of
                                                     show other) []
                          Nothing -> []
 
+extractElemString :: Map VA_Value VA_Value -> String -> (String -> a) -> [a]
 extractElemString m f t =
     case Map.lookup (VA_String f) m of
       Just (VA_String s) -> [t s]
@@ -250,6 +248,7 @@ extractElemString m f t =
                                  show other) []
       Nothing -> []
 
+ident :: String -> AS_Expression
 ident = AS_Ident (mkDummyInfo "") []
 
 convertEtoVA :: Expr -> VA_Value
@@ -271,10 +270,12 @@ convertEtoVA (AtomE a) = case a of
 convertItoVA :: Ident -> VA_Value
 convertItoVA (Ident s) = VA_String s
 
+join :: String -> [String] -> String
 join _sep []  = ""
 join _sep [s] = s
 join sep l   = let rl = reverse l
                 in foldl (\e acc -> acc++sep++e) (head2 rl) (tail rl)
 
+head2 :: [p] -> p
 head2 [] = error "!"
 head2 l = head l

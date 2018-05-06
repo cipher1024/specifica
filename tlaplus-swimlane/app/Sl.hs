@@ -9,7 +9,6 @@ import Data.Map  as Map hiding (splitAt)
 import Data.Set  as Set hiding (splitAt)
 import Debug.Trace as Trace
 import System.Console.GetOpt
-import GHC.Base  as Prelude hiding (join)
 import System.IO
 import Lexer (alexScanTokens)
 import Parser (Stmt(..), Ident(..), Expr(..), parser, listparser, exprparser)
@@ -25,6 +24,8 @@ import System.Exit
 import SLA (readSLA)
 
 data Output = PsTricks
+
+outputformat :: Output
 outputformat = PsTricks
 
 data Flag = Verbose
@@ -267,7 +268,9 @@ config = unsafePerformIO $
         getSLAFile (SLAFile af:_) = Just af
         getSLAFile (_:rest)       = getSLAFile rest
 
+version :: String
 version = "Swimlane (sl), version \"0.2a\""
+help :: String
 help = "Swimlane (sl) renders a TLC counterexample as a LaTeX/pstricks "++
        "pspicture file.\n" ++ usageInfo "\nUsage:" options
 
@@ -279,8 +282,11 @@ say PWarning s                        = hPutStrLn stderr $ "[warning] "++s
 say PError s                          = hPutStrLn stderr $ "[error] "  ++s
 say _ _                               = error "undefined"
 
+note :: String -> IO ()
 note = say PNote
+warn :: String -> IO ()
 warn = say PWarning
+err :: String -> IO b
 err s = do say PError s
            exitFailure
 
@@ -816,6 +822,7 @@ to_pstricks_interactions _defaultNotes numy arrowtips
                   -- defaultMsgNote :: Message -> String
                   -- defaultMsgNote m = protectS (ppRec (RecE m) abbrev)
 
+ref :: Show a => a -> String -> String
 ref stateidx swimlanename = "ref"++show stateidx++swimlanename
 
 tiny :: String
@@ -876,10 +883,12 @@ to_pstricks_graph_close args =
            "\\end{document}"]
    in psclosing ++ (if includefile config then [] else e)
 
+indent :: [a] -> [[a]] -> [[a]]
 indent s = Prelude.map (\line -> s++line)
 
 protectS :: String -> String
 protectS = protectUS
+protectUS :: String -> String
 protectUS = List.map (\c -> case c of
                               '_' -> '-'
                               _ -> c)

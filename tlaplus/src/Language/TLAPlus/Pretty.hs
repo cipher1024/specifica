@@ -156,11 +156,13 @@ ppE AS_CloseFunApp = text "]"
 -- missing pretty printer support, debug aid
 -- ppE e = text $ "(<?>" ++ (show e) ++ "<?>)"
 
+ppFunctionDef :: AS_Expression -> [AS_QBoundN] -> AS_Expression -> Doc
 ppFunctionDef headexpr qbounds expr =
     let bounds = group (cat $ punctuate comma $ map ppQBoundN qbounds)
      in     group( ppE headexpr <//> brackets (align bounds) <+> text "==")
         </> group (ppE expr)
 
+ppOperatorDef :: AS_Expression -> [AS_Expression] -> AS_Expression -> Doc
 ppOperatorDef h l expr =
     let args = if length l > 0
                then parens (cat (punctuate comma (map ppE l)))
@@ -332,9 +334,13 @@ op_infix :: AS_InfixOp -> AS_InfixOp
 op_infix op = op
 op_infixS :: AS_InfixOp -> AS_InfixOp
 op_infixS op = op
+binary :: String -> AS_InfixOp -> Assoc -> Fix
 binary = Infix
+binaryS :: String -> AS_InfixOp -> Assoc -> Fix
 binaryS = Infix
-prefix  = Prefix  
+prefix :: String -> AS_PrefixOp -> Fix
+prefix  = Prefix
+postfix :: String -> AS_PostfixOp -> Fix
 postfix = Postfix
 -- postfixS op           = Infix "" op AssocLeft -- MUST be Infix, used for x[y]
 

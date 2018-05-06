@@ -20,7 +20,7 @@ cabal-version:       >= 1.8
 library
   exposed-modules:   Language.TLAPlus.Eval
 
-  build-depends:     base, containers, mtl, tlaplus, wl-pprint
+  build-depends:     base, containers, mtl, tlaplus, wl-pprint, parsec >= 3.0.1
   hs-source-dirs:    src
   ghc-options:       -Wall
                      -fwarn-tabs

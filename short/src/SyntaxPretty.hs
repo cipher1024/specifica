@@ -3,9 +3,6 @@ module SyntaxPretty
     ppInteractionElement, ppMsgDecl, ppConcernElement, ppTy)
 where
 
-import Data.List (find, elemIndex)
-import Data.Map as Map (foldWithKey)
-import Data.Set as Set (elems, fromList)
 
 import Prelude hiding ((<$>))
 
@@ -68,7 +65,7 @@ ppInteractionElement (SH_RoleDef _p name paramlist l) =
         <+> text "{"
         <$> indent ilevel (align (ppStatementList l))
         <$> text "}"
-ppInteractionElement (SH_VerbTLAOp _p i o u) =
+ppInteractionElement (SH_VerbTLAOp _p _i o u) =
     (case o of
        Nothing -> empty
        Just lo -> text "override " <+>
@@ -88,6 +85,7 @@ ppDisplaySwimlaneAnn (SH_SL_MsgAnn mtype l) =
                         text (ppSH_SL_MsgAnnKey k) <+> text "=" <+> ppExpr e)
                      l))
 
+ppSH_SL_MsgAnnKey :: SH_SL_MsgAnnKey -> String
 ppSH_SL_MsgAnnKey SH_SL_MsgAnnColor = "color"
 ppSH_SL_MsgAnnKey SH_SL_MsgAnnStyle = "style"
 
@@ -290,10 +288,12 @@ ppInstr (SH_I_DoMeanwhile _ il handlers) =
     <$> indent ilevel (align (ppStatementList handlers))
     <$> text "}"
 
+ppWhereExpr :: SH_WhereQuantifierKind -> SH_ExprWrapper -> Doc
 ppWhereExpr SH_All  e = text "all"  <+> ppExpr e
 ppWhereExpr SH_Some e = text "some" <+> ppExpr e
 ppWhereExpr SH_None e = text "none" <+> ppExpr e
 
+ppTy :: SH_Type -> Doc
 ppTy (SH_Ty_UserDef _p t) = text t
 ppTy (SH_Ty_UserDefOrNIL _p t) = text "Nil<" <//> ppTy t <//> text ">"
 ppTy (SH_Ty_Expr _p e) = ppE e
@@ -355,9 +355,9 @@ ppGuardedInstrList (SH_GuardedInstrList _p g label l) =
          (Just hcaller) -> ppHookCallerList hcaller)
     </> ppInstrList l
 
-whenGuard :: Maybe SH_ExprWrapper -> Doc
-whenGuard Nothing = text ""
-whenGuard (Just e) = text "when" <+> ppExpr e
+-- whenGuard :: Maybe SH_ExprWrapper -> Doc
+-- whenGuard Nothing = text ""
+-- whenGuard (Just e) = text "when" <+> ppExpr e
 
 ppAssignList :: [(String, SH_ExprWrapper)] -> Doc
 ppAssignList l = align( fillCat $ punctuate comma
@@ -382,4 +382,5 @@ ppExpr (SH_ExprWrapper _p e) =
 ppExpr (SH_VIEW_REF _p role) =
     text "view" <//> parens (text role)
 
+ilevel :: Int
 ilevel = 2

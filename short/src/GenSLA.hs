@@ -6,7 +6,7 @@ import Flatten
 import Data.Generics
 import Syntax
 import RewriteTimer(allRoles)
-import TLACodeGen(typeKernel, subst, Pattern)
+import TLACodeGen(typeKernel, subst)
 import ParserHelper(inlineOperatorDef)
 
 import Text.ParserCombinators.Parsec.Pos as PPos
@@ -158,7 +158,7 @@ genSLAFile pname spec tla =
 
 seperate :: String -> [String] -> String
 seperate _ [] = ""
-seperate x [a] = a
+seperate _ [a] = a
 seperate x (a:b) = a ++ x ++ seperate x b
 
 commaSep :: [String] -> String
@@ -172,10 +172,10 @@ sendMC spec = nub $ concatMap xtract $ msgDecl spec
   where xtract (SH_MsgDecl _ s r _ _) | isTypeSet r = typeKernel s
                                       | otherwise   = []
 
-recvMC :: SH_FL_Spec -> [String] -- list of roles that recv MC
-recvMC spec = nub $ concatMap xtract $ msgDecl spec
-  where xtract (SH_MsgDecl _ _s r _ _) | isTypeSet r = typeKernel r
-                                       | otherwise   = []
+-- recvMC :: SH_FL_Spec -> [String] -- list of roles that recv MC
+-- recvMC spec = nub $ concatMap xtract $ msgDecl spec
+--   where xtract (SH_MsgDecl _ _s r _ _) | isTypeSet r = typeKernel r
+--                                        | otherwise   = []
 
 cup :: String -> [String] -> String
 cup template roles =
@@ -201,12 +201,13 @@ rewriteAnn colorExpr styleExpr
     let e' = everywhere (mkT (f (colorExpr,styleExpr))) e
      in AS_OperatorDef info h e'
   where f :: (AS_Expression, AS_Expression) -> AS_Expression -> AS_Expression
-        f (ce,se) (AS_StringLiteral _ "@@color@@") = ce
-        f (ce,se) (AS_StringLiteral _ "@@style@@") = se
+        f (ce,_se) (AS_StringLiteral _ "@@color@@") = ce
+        f (_ce,se) (AS_StringLiteral _ "@@style@@") = se
         f _ x = x
 rewriteAnn _ _ x = x
 
 -- FIXME kramer@acm.org reto -- code duplication
+extractColorAnn :: SH_FL_Spec -> AS_Expression
 extractColorAnn spec =
   let allMsgAnn = filter isMsgAnn $ extractAllDisplaySLs spec
       allColor = concatMap colorEntry allMsgAnn
@@ -228,6 +229,7 @@ extractColorAnn spec =
             concatMap (\(k,e) -> if isColor k then [(mtype, e)] else []) l
 
 -- FIXME kramer@acm.org reto -- code duplication
+extractStyleAnn :: SH_FL_Spec -> AS_Expression
 extractStyleAnn spec =
   let allMsgAnn = filter isMsgAnn $ extractAllDisplaySLs spec
       allStyle = concatMap colorEntry allMsgAnn
@@ -248,6 +250,7 @@ extractStyleAnn spec =
         colorEntry (SH_SL_MsgAnn mtype l) =
             concatMap (\(k,e) -> if isStyle k then [(mtype, e)] else []) l
 
+isMsgAnn :: SH_SL_Ann -> Bool
 isMsgAnn (SH_SL_MsgAnn _ _) = True
 
 extractAllDisplaySLs :: SH_FL_Spec -> [SH_SL_Ann]
@@ -274,14 +277,19 @@ allFieldsOfMsg mtype l = concatMap (allFieldsOfMsg0 mtype) l
             | otherwise = []
         fieldNames l = let (_, names) = unzip l in names
 
+defaultColor :: String
 defaultColor = "black"
+defaultStyle :: String
 defaultStyle = "solid"
 
 -----
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

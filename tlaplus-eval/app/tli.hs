@@ -1,11 +1,10 @@
 module Main where
 
+import Data.Either
+
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
-import System.IO (hFlush, stdout)
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Language( emptyDef )
 
 import Language.TLAPlus.Parser( tlaspec, cfgspec, mkState )
 import Language.TLAPlus.Syntax
@@ -18,11 +17,11 @@ main =
     do{ args <- getArgs
       ; let fname = args !! 0
       ; let tlaname = case reverse fname of
-                      ('a':'l':'t':'.':fn) -> fname
-                      otherwise -> fname ++ ".tla"
+                      ('a':'l':'t':'.':_) -> fname
+                      _  -> fname ++ ".tla"
       ; let cfgname = case reverse fname of
                       ('a':'l':'t':'.':fn) -> reverse fn ++ ".cfg"
-                      otherwise -> fname ++ ".cfg"
+                      _ -> fname ++ ".cfg"
       ; cfg <- readFile $ cfgname
       ; case runParser cfgspec mkState cfgname cfg of
           Left err -> do{ putStr "cfg configuration parse error at "
@@ -54,17 +53,15 @@ main =
 readTLA :: String -> IO (Either ParseError [AS_Spec])
 readTLA fname =
     do{ let tlaname = case reverse fname of
-                        ('a':'l':'t':'.':fn) -> fname
-                        otherwise -> fname ++ ".tla"
+                        ('a':'l':'t':'.':_) -> fname
+                        _ -> fname ++ ".tla"
       ; tla <- readFile $ tlaname
       ; case runParser tlaspec mkState tlaname tla of
           Left err -> return $ Left $ err
           Right tlaspec  ->
             let (AS_ExtendDecl _info l) = extendDecl tlaspec
              in mapM readTLA l >>= \as ->
-               let as' = filter (\t -> case t of
-                                         Left err -> False
-                                         Right t -> True) as
+               let as' = filter isRight as
                 in return $
                      Right ([tlaspec] ++ (concatMap (\(Right t) -> t) as'))
       }

@@ -3,26 +3,22 @@ module Parser
 where
 
 import Data.Char (toLower, toUpper, isAlpha)
-import Debug.Trace as Trace
-import System.Environment (getArgs)
+import Data.Functor.Identity
+import Text.Parsec.Prim hiding (try)
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language( emptyDef )
-import Text.ParserCombinators.Parsec.Pos(SourcePos(..))
 import qualified Text.ParserCombinators.Parsec.Token as P
-import Data.List (nub, (\\))
-import Data.Set as Set (fromList)
+import Data.List (nub)
 
 import Language.TLAPlus.ParserState
-         (TLAParser, PState, mkState
-         , setRole, getRole
-         , setInteraction, getInteraction)
-import Language.TLAPlus.Syntax
-         (AS_Expression(..)) -- AS_Ident, AS_DiscreteSet
+         (TLAParser, mkState, setRole, getRole, setInteraction, getInteraction)
+
+
 import Syntax
 
 import Language.TLAPlus.Parser as TLAParser -- for expression parsing
 
+reserved :: String -> ParsecT [Char] u Identity ()
 reserved s =     reservedX s               -- as is, e.g. "Set" for types
              <|> reservedX (map toLower s) -- all lower case keywords
              <|> reservedX (map toUpper s) -- all upper case keywords
@@ -34,8 +30,8 @@ shortspec = do { whiteSpace
                ; c <- do{ p <- getPosition
                         ; cname <- option "default" $
                                       do { reserved "CONCERN"
-                                         ; c <- identifier <?> "concern name"
-                                         ; return c
+                                         ; identifier <?> "concern name"
+                                         ;
                                          }
                         ; reservedOp "{"
                         ; l <- sepBy concernEl whiteSpace
@@ -47,29 +43,27 @@ shortspec = do { whiteSpace
                                }
                }
 
-specEnd :: TLAParser ()
-specEnd = do{ char '#' <?> "end of protocol (#)"
-            ; whiteSpace
-            }
+-- specEnd :: TLAParser ()
+-- specEnd = do{ char '#' <?> "end of protocol (#)"
+--             ; whiteSpace
+--             }
 
 ---- CONCERN ------------------------------------------------------------------
-concern :: TLAParser SH_Concern
-concern = do{ p <- getPosition
-            ; reserved "CONCERN"
-            ; c <- identifier <?> "concern name"
-            ; reservedOp "{"
-            ; l <- sepBy concernEl whiteSpace
-            ; reservedOp "}"
-            ; return $ SH_Concern p c l
-            }
+-- concern :: TLAParser SH_Concern
+-- concern = do{ p <- getPosition
+--             ; reserved "CONCERN"
+--             ; c <- identifier <?> "concern name"
+--             ; reservedOp "{"
+--             ; l <- sepBy concernEl whiteSpace
+--             ; reservedOp "}"
+--             ; return $ SH_Concern p c l
+--             }
 
 concernEl :: TLAParser SH_ConcernElement
-concernEl = do{ e <- choice [ constant
-                            , roleList
-                            , interaction
-                            ]
-              ; return e
-              }
+concernEl = choice [ constant
+            , roleList
+            , interaction
+            ]
 
 constant :: TLAParser SH_ConcernElement
 constant = do{ p <- getPosition
@@ -126,13 +120,13 @@ extendMsg = do{ p <- getPosition
 
 interactionEl :: TLAParser SH_InteractionElement
 interactionEl = do{ p <- getPosition
-                  ; e <- choice [ do { m <- msgDecl
-                                     ; return $ SH_IntraInteractionMsg p m }
+                  ; choice [ do { m <- msgDecl
+                                ; return $ SH_IntraInteractionMsg p m }
                                 , extendMsg
                                 , roledef
                                 , verbTLA
-                                , displaySL] -- add try if more than sl
-                  ; return e
+                                , displaySL]
+                  ;
                   }
 
 verbTLA :: TLAParser SH_InteractionElement
@@ -162,7 +156,7 @@ displaySL = do { p <- getPosition
                }
 
 displaySLEntry :: TLAParser SH_SL_Ann
-displaySLEntry = do { p <- getPosition
+displaySLEntry = do { _ <- getPosition
                     ; reserved "MSG"
                     ; mtype <- identifier
                     ; l <- commaSep
@@ -200,33 +194,31 @@ roledef = do{ p <- getPosition
             }
 
 roleEl :: TLAParser [SH_RoleElement]
-roleEl = do{ l <- sepBy (choice [ try whenblock
-                                , try requires
-                                , try view  -- starts with STATE also
-                                , try timer -- start with STATE also
-                                , try state -- genuine STATE value
-                                , try callhandler
-                                , try (msghandler True) -- HANDLE
-                                , try timeouthandler
-                                , try crashhandler
-                                , try every
-                                , try extendHook
-                                , try use
-                                , taghandler
-                                , oncehandler
-                               ])
-                         whiteSpace
-         ; return l
-         }
+roleEl = sepBy (choice [ try whenblock
+                   , try requires
+                   , try view  -- starts with STATE also
+                   , try timer -- start with STATE also
+                   , try state -- genuine STATE value
+                   , try callhandler
+                   , try (msghandler True) -- HANDLE
+                   , try timeouthandler
+                   , try crashhandler
+                   , try every
+                   , try extendHook
+                   , try use
+                   , taghandler
+                   , oncehandler
+                  ])
+            whiteSpace
 
 use :: TLAParser SH_RoleElement
 use = do{ p <- getPosition
         ; reserved "USE"
-        ; e <-     do { reserved "STATE"
-                      ; statefield <- identifier
-                      ; reserved "OF"
-                      ; interact <- identifier
-                      ; return $ SH_UseState p statefield interact
+        ; do { reserved "STATE"
+             ; statefield <- identifier
+             ; reserved "OF"
+             ; interact <- identifier
+             ; return $ SH_UseState p statefield interact
                       }
                <|> do { reserved "MSG"
                       ; t <- identifier
@@ -234,7 +226,7 @@ use = do{ p <- getPosition
                       ; interact <- identifier
                       ; return $ SH_UseMsg p t interact
                       }
-        ; return e
+        ;
         }
 
 requires :: TLAParser SH_RoleElement
@@ -253,7 +245,7 @@ state = do{ p <- getPosition
           ; t <- ty
           ; id <- identifier {-type-}
           ; init <- option Nothing (do { reservedOp "="
-                                       ; pp <- getPosition
+                                       ; _ <- getPosition
                                        ; init <- expr
                                        ; return $ Just init
                                        })
@@ -284,7 +276,7 @@ msgType :: TLAParser [(SH_Type, String)]
 msgType = parens $ commaSep (do { t <- ty
                                 ; whiteSpace
                                 ; i <- identifier
-                                ; return $ (t,i)
+                                ; return (t,i)
                                 })
 
 callhandler :: TLAParser SH_RoleElement
@@ -295,11 +287,10 @@ callhandler = do { p <- getPosition
                  ; reserved "EVENT"
                  ; label <- identifier
                  ; msgrec <- option []
-                               (do { m <- parens $ commaSep
-                                            (do { t <- identifier
-                                                ; i <- identifier
-                                                ; return (t,i) })
-                                   ; return $ m })
+                               (parens $ commaSep
+                          (do { t <- identifier
+                              ; i <- identifier
+                              ; return (t,i) }))
                  ; hook <- option Nothing (do { l <- commaSep hookCaller
                                               ; return $ Just l})
                  ; l <- handlerBody
@@ -324,10 +315,10 @@ msghandler inHandle =
      ; m <- identifier
      ; from_scope <- option Nothing
        (do { reserved "FROM"
-           ; scope <- (do { reserved "ALL"
-                          ; v <- parens identifier
-                          ; w <- whereQual
-                          ; return $ Just (SH_FromAll v, w)})
+           ; (do { reserved "ALL"
+                 ; v <- parens identifier
+                 ; w <- whereQual
+                 ; return $ Just (SH_FromAll v, w)})
                   <|> (do { reserved "MAJORITY"
                           ; v <- parens identifier
                           ; w <- whereQual
@@ -340,7 +331,7 @@ msghandler inHandle =
                                                 })
                           ; w <- whereQual
                           ; return $ Just (SH_FromExp t e, w)})
-           ; return scope
+           ;
            })
      ; hook <- option Nothing (do { l <- commaSep hookCaller
                                   ; return $ Just l})
@@ -355,19 +346,17 @@ msghandler inHandle =
      }
 
 whereQual :: TLAParser (Maybe (SH_ExprWrapper, SH_WhereQuantifierKind))
-whereQual = do { w <- option Nothing
-                             (do { reserved "WHERE"
-                                 ; q <-     do { reserved "ALL"
-                                               ; return SH_All }
-                                        <|> do { reserved "SOME"
-                                               ; return SH_Some }
-                                        <|> do { reserved "NONE"
-                                               ; return SH_None }
-                                 ; e <- expr
-                                 ; return $ Just (e, q)
-                                 })
-               ; return w
-               }
+whereQual = option Nothing
+            (do { reserved "WHERE"
+                ; q <-     do { reserved "ALL"
+                              ; return SH_All }
+                       <|> do { reserved "SOME"
+                              ; return SH_Some }
+                       <|> do { reserved "NONE"
+                              ; return SH_None }
+                ; e <- expr
+                ; return $ Just (e, q)
+                })
 
 timeouthandler :: TLAParser SH_RoleElement
 timeouthandler = do { p <- getPosition
@@ -411,7 +400,7 @@ every = do { p <- getPosition
            ; l <- handlerBody
            ; st <- getState
            ; let role = getRole st
-           ; let lowRole = map toLower role
+           -- ; let lowRole = map toLower role
            ; return $ SH_Every p role guard e hook l
            }
 
@@ -422,7 +411,7 @@ extendHook = do{ p <- getPosition
                ; l <- handlerBody
                ; st <- getState
                ; let role = getRole st
-               ; let lowRole = map toLower role
+               -- ; let lowRole = map toLower role
                ; return $ SH_Extend_Hook p role hl l
                }
 
@@ -456,7 +445,7 @@ taghandler = do { p <- getPosition
                                       ; i <- identifier
                                       ; reservedOp "="
                                       ; e <- expr
-                                      ; return $ ((t,i),e)
+                                      ; return ((t,i),e)
                                       })
                 ; reserved "}"
                 ; st <- getState
@@ -490,21 +479,21 @@ whenblock = do { p <- getPosition
                }
 
 handlerannList :: TLAParser [HandlerAnnotation]
-handlerannList = do { p <- getPosition
+handlerannList = do { _ <- getPosition
                     ; reserved "USING"
-                    ; l <-     do { reservedOp "["
-                                  ; l <- commaSep handlerann
-                                  ; reservedOp "]"
-                                  ; return l
+                    ; do { reservedOp "["
+                         ; l <- commaSep handlerann
+                         ; reservedOp "]"
+                         ; return l
                                   }
                            <|> do { a <- handlerann
-                                  ; return $ [a]
+                                  ; return [a]
                                   }
-                    ; return l
+                    ;
                     }
 
 handlerann :: TLAParser HandlerAnnotation
-handlerann = do { p <- getPosition
+handlerann = do { _ <- getPosition
                 ; a <- identifier
                 ; l <- option [] (parens $ commaSep identifier)
                 ; return $ HandlerAnnotation a l
@@ -573,12 +562,12 @@ instrList = sepBy1 (choice [
 
 viewOrExpr :: TLAParser SH_ExprWrapper
 viewOrExpr = do{ p <- getPosition
-               ; e <-     try (do{ reserved "VIEW"
-                                 ; r <- parens identifier
-                                 ; return $ SH_VIEW_REF p r
+               ; try (do{ reserved "VIEW"
+                        ; r <- parens identifier
+                        ; return $ SH_VIEW_REF p r
                                  })
                       <|> try expr
-               ; return e
+               ;
                }
 
 
@@ -591,8 +580,7 @@ instrMsgSend1 = do { p <- getPosition
                    ; m <-     do { reservedOp "!"; return False }
                           <|> do { reservedOp "!!"; return True }
                    ; t <- identifier
-                   ; msgrec <- option [] (do { m <- msgRecord
-                                             ; return m })
+                   ; msgrec <- option [] msgRecord
                    ; st <- getState
                    ; let role = getRole st
                    ; return $ SH_I_MsgSend1 p role m False dest t msgrec
@@ -602,7 +590,7 @@ msgRecord :: TLAParser [(String, SH_ExprWrapper)]
 msgRecord = parens $ commaSep (do { i <- identifier
                                   ; reservedOp "="
                                   ; e <- expr
-                                  ; return $ (i,e)
+                                  ; return (i,e)
                                   })
 
 instrChangeState :: TLAParser SH_Instr
@@ -654,8 +642,7 @@ instrReply :: TLAParser SH_Instr
 instrReply = do { p <- getPosition
                 ; reserved "REPLY"
                 ; t <- identifier
-                ; msgrec <- option [] (do { m <- msgRecord
-                                          ; return m })
+                ; msgrec <- option [] msgRecord
                 ; return $ SH_I_Reply p t msgrec
                 }
 
@@ -759,22 +746,20 @@ letBinding = do { i <- identifier
 
 ty :: TLAParser SH_Type
 ty = do{ p <- getPosition
-       ; t' <-  do{ ptype <- try paramtype
-                  ; return ptype
-                  }
+       ; try paramtype
             <|> do{ t <- identifier
                   ; return $ SH_Ty_UserDef p t
                   }
-       ; return t'
+       ;
        }
 
 paramtype :: TLAParser SH_Type
 paramtype = do{ p <- getPosition
-              ; t <- choice [ do { reserved "Set"
-                                 ; reservedOp "<"
-                                 ; t <- ty
-                                 ; reservedOp ">"
-                                 ; return $ SH_Ty_SetOf p t
+              ; choice [ do { reserved "Set"
+                            ; reservedOp "<"
+                            ; t <- ty
+                            ; reservedOp ">"
+                            ; return $ SH_Ty_SetOf p t
                                  },
                               do { reserved "Seq"
                                  ; reservedOp "<"
@@ -810,46 +795,47 @@ paramtype = do{ p <- getPosition
                                  ; reservedOp ")"
                                  ; return $ SH_Ty_Enum p l
                                  }]
-              ; return t
+              ;
               }
 
 -------------------------------------------------------------------------------
+lexer :: P.GenTokenParser [Char] u Identity
 lexer = lexer0{P.reservedOp = rOp}
           where
             lexer0      = P.makeTokenParser shortdef
             resOp0      = P.reservedOp lexer0
-            resOp1 name = do string name -- \in
+            resOp1 name = do _ <- string name -- \in
                              notFollowedBy letter <?> ("end of " ++ show name)
-            resOp2 name = do string name -- \ (set difference)
+            resOp2 name = do _ <- string name -- \ (set difference)
                              notFollowedBy (letter <|> char '/') <?>
                                                ("end of " ++ show name)
-            resOp3 name = do string name -- \/ (or)
+            resOp3 name = do _ <- string name -- \/ (or)
                              return ()
             ------
-            resOp4 name = do string name -- ~>
+            resOp4 name = do _ <- string name -- ~>
                              return ()
-            resOp5 name = do char '~' -- ~ (not)
-                             return ()
+            resOp5 _name = do _ <- char '~' -- ~ (not)
+                              return ()
             ------
-            resOp6 name = do string name -- ==
+            resOp6 name = do _ <- string name -- ==
                              notFollowedBy (char '=' {-??-} <|> char '>') <?>
                                                ("end of " ++ show name)
-            resOp7 name = do string name -- =>
+            resOp7 name = do _ <- string name -- =>
                              return ()
-            resOp8 name = do string name -- =
+            resOp8 name = do _ <- string name -- =
                              notFollowedBy (char '=' <|> char '>') <?>
                                                ("end of " ++ show name)
             ------
-            resOpLT0 name = do string name -- <>
+            resOpLT0 name = do _ <- string name -- <>
                                notFollowedBy (char '>' {-??-} <|> char '=') <?>
                                                  ("end of " ++ show name)
-            resOpLT1 name = do string name -- <=
+            resOpLT1 name = do _ <- string name -- <=
                                return ()
-            resOpLT2 name = do string name -- <
+            resOpLT2 name = do _ <- string name -- <
                                notFollowedBy (char '=' <|> char '>') <?>
                                                  ("end of " ++ show name)
             ------
-            resOpAngular name = do string name -- []
+            resOpAngular name = do _ <- string name -- []
                                    notFollowedBy (char ']') <?>
                                                 ("end of " ++ show name)
             ------
@@ -883,9 +869,10 @@ lexer = lexer0{P.reservedOp = rOp}
                             "SUBSET" -> resOp1 name
                             "UNION" -> resOp1 name
                             _ -> resOp0 name
-            isAlphaOrUnderscore c = isAlpha c || c == '_'
+            -- isAlphaOrUnderscore c = isAlpha c || c == '_'
             lexeme p = do { x <- p; P.whiteSpace lexer0; return x }
 
+shortdef :: P.GenLanguageDef [Char] u Identity
 shortdef = emptyDef {
   P.commentStart    = "(*"
 , P.commentEnd      = "*)"
@@ -897,7 +884,7 @@ shortdef = emptyDef {
 -- TLC EXTENSION, allow @ in identifiers for 'short' pc guards (when a@b ...)
 , P.identLetter     = alphaNum <|> char '_' <|> char '@'
 , P.opStart         = oneOf $ nub $
-                        map (\s -> head s) $ P.reservedOpNames shortdef
+                        map head $ P.reservedOpNames shortdef
 , P.opLetter        = oneOf symbs
 , P.reservedOpNames = [ -- prefix operators
                         "SUBSET"
@@ -982,21 +969,39 @@ shortdef = emptyDef {
   where
     symbs = filter (not . isAlpha) . concat $ P.reservedOpNames shortdef
 
-dot             = P.dot lexer
+-- dot :: ParsecT [Char] u Identity String
+-- dot             = P.dot lexer
+parens :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
 parens          = P.parens lexer
-braces          = P.braces lexer
-squares         = P.squares lexer
-semiSep         = P.semiSep lexer
-semiSep1        = P.semiSep1 lexer
+-- braces :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+-- braces          = P.braces lexer
+-- squares :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+-- squares         = P.squares lexer
+-- semiSep :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+-- semiSep         = P.semiSep lexer
+-- semiSep1 :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+-- semiSep1        = P.semiSep1 lexer
+commaSep :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
 commaSep        = P.commaSep lexer
-commaSep1       = P.commaSep1 lexer
-brackets        = P.brackets lexer
+-- commaSep1 :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+-- commaSep1       = P.commaSep1 lexer
+-- brackets :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+-- brackets        = P.brackets lexer
+whiteSpace :: ParsecT [Char] u Identity ()
 whiteSpace      = P.whiteSpace lexer
-symbol          = P.symbol lexer
+-- symbol :: String -> ParsecT [Char] u Identity String
+-- symbol          = P.symbol lexer
+identifier :: ParsecT [Char] u Identity String
 identifier      = P.identifier lexer
+reservedX :: String -> ParsecT [Char] u Identity ()
 reservedX       = P.reserved lexer
+reservedOp :: String -> ParsecT [Char] u Identity ()
 reservedOp      = P.reservedOp lexer
-integer         = P.integer lexer
-natural         = P.natural lexer
-charLiteral     = P.charLiteral lexer
+-- integer :: ParsecT [Char] u Identity Integer
+-- integer         = P.integer lexer
+-- natural :: ParsecT [Char] u Identity Integer
+-- natural         = P.natural lexer
+-- charLiteral :: ParsecT [Char] u Identity Char
+-- charLiteral     = P.charLiteral lexer
+stringLiteral :: ParsecT [Char] u Identity String
 stringLiteral   = P.stringLiteral lexer

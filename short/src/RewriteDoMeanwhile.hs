@@ -3,7 +3,6 @@ module RewriteDoMeanwhile(rewriteDoMeanwhile) where
 import Data.Generics
 import Syntax
 import Flatten
-import Debug.Trace(trace)
 import Text.ParserCombinators.Parsec.Pos as PPos
 import Language.TLAPlus.Syntax as TLASyntax
 import RewriteLifecycle(predicateWhen)
@@ -71,7 +70,7 @@ labelAwait l =
         (labels, is) = unzip $ map labelAwait0 (zip ids l)
      in (concat labels, is) -- concat to drop [] entries
   where labelAwait0 :: (Int, SH_Instr) -> ([String], SH_Instr)
-        labelAwait0 (i, SH_I_Await info handler) =
+        labelAwait0 (i, SH_I_Await _info handler) =
             case handler of
               SH_MsgHandler info ann role when mtype hook any from gil ->
                 ([mkL i], SH_I_Await info $
@@ -97,12 +96,13 @@ labelAwait l =
                 ([mkL i], SH_I_Await info $
                             SH_Once info role when label
                               (combHook hook (mkL i)) gil)
+              _ -> undefined
         labelAwait0 (_, x) = ([], x)
         combHook Nothing s  = Just [SH_HookCaller upos s []]
         combHook (Just l) s = Just (l ++ [SH_HookCaller upos s []])
         mkL i = "wp_" ++ show i
         numberAwaits l = numberAwaits0 0 l []
-        numberAwaits0 n [] acc = acc
+        numberAwaits0 _ [] acc = acc
         numberAwaits0 n [SH_I_Await _ _] acc = acc ++ [n+1]
         numberAwaits0 n [_] acc = acc ++ [n]
         numberAwaits0 n (SH_I_Await _ _ : rest) acc =
@@ -110,15 +110,19 @@ labelAwait l =
         numberAwaits0 n (_:rest) acc =
             numberAwaits0 n rest (acc ++ [n])
 
+mkOR :: [AS_Expression] -> AS_Expression
 mkOR [e] = e
 mkOR [a,b] = AS_InfixOP epos AS_OR a b
 mkOR l = AS_LOR epos l
 
 ---- HELPER -------------------------------------------------------------------
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

@@ -8,7 +8,7 @@ import Data.List(groupBy, nub)
 import Debug.Trace(trace)
 import RewriteCont(beautifyLAND)
 
-import Text.ParserCombinators.Parsec.Pos(newPos, SourcePos(..))
+import Text.ParserCombinators.Parsec.Pos(newPos, SourcePos)
 import Language.TLAPlus.Syntax as TLASyntax
 
 rewriteExtendHook :: SH_FL_Spec -> SH_FL_Spec
@@ -27,19 +27,19 @@ tp label spec = trace (">>>> " ++ label ++ prettyPrintFlatSH spec) spec
 
 pruneEmptyInstructionLists :: SH_FL_Spec -> SH_FL_Spec
 pruneEmptyInstructionLists = everywhere (mkT f)
-    where f h@(SH_MsgHandler _ ann role when mtype glblHooks any from ginstr) =
+    where f (SH_MsgHandler _ ann role when mtype _glblHooks any from ginstr) =
               SH_MsgHandler upos ann role when mtype Nothing any from
                 (purgeEmpty ginstr)
-          f (SH_CallHandler _ role when label args glblHooks ginstr) =
+          f (SH_CallHandler _ role when label args _glblHooks ginstr) =
               SH_CallHandler upos role when label args Nothing
                 (purgeEmpty ginstr)
-          f (SH_TimeoutHandler _ role when name glblHooks ginstr) =
+          f (SH_TimeoutHandler _ role when name _glblHooks ginstr) =
               SH_TimeoutHandler upos role when name Nothing
                 (purgeEmpty ginstr)
-          f (SH_CrashHandler _ ann role when remoteRole id glblHooks ginstr) =
+          f (SH_CrashHandler _ ann role when remoteRole id _glblHooks ginstr) =
               SH_CrashHandler upos ann role when remoteRole id Nothing
                 (purgeEmpty ginstr)
-          f (SH_Every _ role guard timer glblHooks ginstr) =
+          f (SH_Every _ role guard timer _glblHooks ginstr) =
               SH_Every upos role guard timer Nothing
                 (purgeEmpty ginstr)
           f (SH_Extend_Hook _ role callee ginstr) =
@@ -58,7 +58,7 @@ mergeExtendHook spec = fixP mergeExtendHook0 spec
     -- note that we're clearing the hooks after the rewrite to indicate they
     -- where merged.
     where mergeExtendHook0 = everywhere (mkT f)
-          f h@(SH_MsgHandler _ ann role when mtype glblHooks any from ginstr) =
+          f (SH_MsgHandler _ ann role when mtype glblHooks any from ginstr) =
               SH_MsgHandler upos ann role when mtype Nothing any from
                 (spliceHooks spec glblHooks ginstr)
           f (SH_CallHandler _ role when label args glblHooks ginstr) =
@@ -112,7 +112,7 @@ appendSpliceHookGIL spec extil l =
     appendSpliceHookGIL0 :: SH_FL_Spec
                          -> [SH_GuardedInstrList] -> SH_GuardedInstrList
                          -> [SH_GuardedInstrList]
-    appendSpliceHookGIL0 spec extil
+    appendSpliceHookGIL0 _spec extil
                          g@(SH_GuardedInstrList i guard Nothing l) =
         -- no branch local hooks, add global ones only (extil) if existent
         if extil == []
@@ -131,18 +131,21 @@ appendSpliceHookGIL spec extil l =
                      ) h
 
 -- FIXME kramer@acm.org reto -- I'm sure there's a monad call to get rid of N.
+mkLAND :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
 mkLAND (Just (SH_ExprWrapper _ a)) (Just (SH_ExprWrapper _ b)) =
     Just $ SH_ExprWrapper upos (AS_LAND epos [a,b])
 mkLAND Nothing ew@(Just (SH_ExprWrapper _ _e)) = ew
 mkLAND ew@(Just (SH_ExprWrapper _ _e)) Nothing = ew
 mkLAND Nothing Nothing = Nothing
+mkLAND _ _ = undefined
 
 substGIL :: [(String, SH_ExprWrapper)] -> [SH_GuardedInstrList]
             -> [SH_GuardedInstrList]
 substGIL l = everywhere (mkT f)
   where f i@(AS_Ident _ _ s) =
             case lookup s l of Nothing -> i
-                               Just w  -> case w of SH_ExprWrapper _ e -> e
+                               Just (SH_ExprWrapper _ e) -> e
+                               _ -> undefined
         f x = x
 
 splitEXT_HOOK :: SH_FL_Spec -> SH_FL_Spec
@@ -199,9 +202,11 @@ combineEXT_HOOK l = concatMap comb l
                 il' = remDupHACK il
                 args' = map mkArg [1..length args]
              in [SH_Extend_Hook upos r [SH_HookCallee upos name args'] il']
+        comb _ = undefined
         mkIL :: SH_RoleElement -> [SH_GuardedInstrList]
         mkIL (SH_Extend_Hook _ _ [SH_HookCallee _ _ args] l) =
             substGIL (mkArgs args) l
+        mkIL _ = undefined
         mkArgs :: [String] -> [(String, SH_ExprWrapper)]
         mkArgs l = map (\(s,i) ->
                           (s, SH_ExprWrapper upos $ mk_AS_Ident (mkArg i))
@@ -260,10 +265,13 @@ wipePos = everywhere (mkT f)
         f x | otherwise = x
 
 ---- HELPER -------------------------------------------------------------------
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

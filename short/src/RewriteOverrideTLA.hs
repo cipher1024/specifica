@@ -3,14 +3,14 @@ module RewriteOverrideTLA(rewriteOverrideTLA) where
 import Data.Generics
 import Syntax
 import Flatten
-import Debug.Trace(trace)
 import Text.ParserCombinators.Parsec.Pos as PPos
 import Language.TLAPlus.Syntax as TLASyntax
 
 rewriteOverrideTLA :: SH_FL_Spec -> SH_FL_Spec
 rewriteOverrideTLA = dropOverrideTLA . substTLA
 
-dummyI = "dummyInteraction"
+-- dummyI :: String
+-- dummyI = "dummyInteraction"
 
 substTLA :: SH_FL_Spec -> SH_FL_Spec
 substTLA spec = fixP (everywhere (mkT f)) spec
@@ -52,10 +52,13 @@ dropOverrideTLA0 = filter (not . isOverrideTLA)
         isOverrideTLA _ = False
 
 ---- HELPER -------------------------------------------------------------------
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

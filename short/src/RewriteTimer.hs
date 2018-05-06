@@ -24,6 +24,7 @@ rewriteTimer spec =
   where noTimers spec =
             [] == (concatMap (\r -> allTimers spec r) (allRoles spec))
 
+dummyI :: String
 dummyI = "dummyInteraction"
 
 rewriteTimerBoilerplate :: AS_Expression -> SH_FL_Spec -> SH_FL_Spec
@@ -135,6 +136,7 @@ conj Nothing e =
     Just (SH_ExprWrapper upos (mk_AS_Ident e))
 conj (Just (SH_ExprWrapper _ a)) e =
     Just (SH_ExprWrapper upos (AS_LAND epos [a, mk_AS_Ident e]))
+conj (Just _) _ = undefined
 
 updateSched :: String -> Maybe String -> [(AS_Expression, String)]
             -> [String] -> SH_Instr
@@ -200,8 +202,7 @@ appendInstr0 role name ginstr =
                         map (\(_,n) -> n) r -- extract timername for cancel
                  in if (name == Nothing) && (r == []) && (c == [])
                     then []
-                    else let Just n = name
-                          in [updateSched role name r c]
+                    else [updateSched role name r c]
         disable = case name of
                     Nothing -> []
                     Just n -> [SH_I_ChangeState upos
@@ -213,8 +214,8 @@ appendInstr0 role name ginstr =
 
 rewriteEvery :: SH_FL_Spec -> SH_FL_Spec
 rewriteEvery = everywhere (mkT f)
-    where f roledef@(SH_RoleDef _ rname vars elems) =
-              let genTimers = map (\(SH_Every _ _ _ period _ ginstr) ->
+    where f (SH_RoleDef _ rname vars elems) =
+              let genTimers = map (\(SH_Every _ _ _ period _ _ginstr) ->
                                       SH_Timer upos rname $ every period)
                                 (allEvery elems)
                   new_elems = concatMap (replEvery rname) elems
@@ -225,7 +226,7 @@ rewriteEvery = everywhere (mkT f)
                                        (SH_Every _ _ _ _ _ _) -> True
                                        _ -> False)
           -- No guard case
-          replEvery rname (SH_Every _ role Nothing period hook ginstr) =
+          replEvery rname (SH_Every _ _role Nothing period hook ginstr) =
               let i = SH_I_Timerrestart upos period (every period)
                in [SH_TimeoutHandler upos (lower rname) Nothing
                       (every period) hook (appendInstrRaw i ginstr)]
@@ -235,7 +236,7 @@ rewriteEvery = everywhere (mkT f)
           -- rescheduled. If the every statement is guarded, we thus create
           -- two handlers to cover the regular and the case where the guard
           -- is false to disable (i.e. not restart) the timer.
-          replEvery rname (SH_Every _ role guard period hook ginstr) =
+          replEvery rname (SH_Every _ _role guard period hook ginstr) =
               let i = SH_I_Timerrestart upos period (every period)
                   j = SH_I_Timercancel upos (every period)
                in [SH_TimeoutHandler upos (lower rname) guard -- regular guard
@@ -248,6 +249,7 @@ rewriteEvery = everywhere (mkT f)
           replEvery _ x = [x]
           negate (Just (SH_ExprWrapper _ e)) =
                    Just (SH_ExprWrapper upos (AS_PrefixOP epos AS_Not e))
+          negate _ = undefined
 
 -- only generate for linear time, not for wrap around mode
 rewriteLinearStutter :: SH_FL_Spec -> SH_FL_Spec
@@ -290,7 +292,7 @@ appendInstrRaw0 instr ginstr =
 
 allTimers :: SH_FL_Spec -> String -> [String]
 allTimers spec role = everything (++) ([] `mkQ` f role) spec
-  where f role t@(SH_Timer _ r name) | r == role = [name]
+  where f role (SH_Timer _ r name) | r == role = [name]
         f _ _ = []
 
 genTimelineInit :: SH_FL_Spec -> AS_Expression -- union of sets
@@ -329,20 +331,26 @@ allRoles = everything (++) ([] `mkQ` f)
   where f (SH_RoleDef _ name _ _) = [name]
         f _ = []
 
+enable :: String -> String
 enable s = "g_" ++ s ++ "_enabled"
+timeout :: String -> String
 timeout s = s ++ "_timeout"
 -- FIXME kramer@acm.org reto -- really I need a counter env to number the
 -- "every generated" timers.
+every :: SH_ExprWrapper -> String
 every (SH_ExprWrapper _ (AS_Ident _ _ s)) = "every_" ++ s
 every (SH_ExprWrapper _ (AS_Num _ i)) = "every_" ++ show i
+every _ = undefined
 
 -- NOTE kramer@acm.org reto -- MaxTime can either be a constant in which
 -- case the user must declare it as CONSTANT and add it to the .cfg file,
 -- or it can be defined as TLA { MaxTime = x * SomeTimerPeriod }
+genTimeType :: AS_UnitDef
 genTimeType =
     inlineOperatorDef $ unlines
       ["Time == 0 .. MaxTime"]
 
+genNow :: AS_UnitDef
 genNow =
     inlineOperatorDef $ unlines
       [ "Now(timeline) ==",
@@ -352,14 +360,17 @@ genNow =
         "          IN CHOOSE t \\in times: \\A tt \\in times: t <= tt"]
 
 -- FIXME kramer@acm.org reto -- hardcoded st_GLOBAL reference
+genNowOp :: AS_UnitDef
 genNowOp =
     inlineOperatorDef $ unlines
       ["NOW == Now(st_GLOBAL.g_timeline)"]
 
+genTimeMax :: AS_UnitDef
 genTimeMax =
     inlineOperatorDef $ unlines
       ["Min2(a,b) == IF a < b THEN a ELSE b"]
 
+genLinearTimeMaxd :: AS_UnitDef
 genLinearTimeMaxd =
     inlineOperatorDef $ unlines
       [ "LinearTimeMaxd(timeline) ==",
@@ -370,6 +381,7 @@ genLinearTimeMaxd =
 -- FIXME kramer@acm.org reto -- For the linear clock, I should really stop
 -- the clock the very first time "now + x[1]" exceeds MaxTime and stutter
 -- from there.
+genTimerRemoveAndSchedule :: AS_UnitDef
 genTimerRemoveAndSchedule =
     inlineOperatorDef $ unlines
       [ "TimerRemoveAndSchedule(timeline,remove,new,cancel) ==",
@@ -398,6 +410,7 @@ genTimerRemoveAndSchedule =
 -- no longer return timers if at least one of them hit the MaxTime
 -- FIXME kramer@acm.org reto -- only applicable if we generate for linear
 --                              time
+genTimerNext :: AS_UnitDef
 genTimerNext =
     inlineOperatorDef $ unlines
       [ "TimerNext(timeline) == ",
@@ -407,6 +420,7 @@ genTimerNext =
         "           entry == CHOOSE x \\in timeline: x[1] = now",
         "        IN entry[2][2] \\* timer in <<t, <<role, _timer_>> >>"]
 
+genRoleNext :: AS_UnitDef
 genRoleNext =
     inlineOperatorDef $ unlines
       [ "RoleNext(timeline) ==",
@@ -416,6 +430,7 @@ genRoleNext =
         "           entry == CHOOSE x \\in timeline: x[1] = now",
         "        IN entry[2][1] \\* role in <<t, <<_role_, timer>> >>"]
 
+lower :: String -> String
 lower = map toLower
 
 hasGlobalRole :: SH_FL_Spec -> Bool
@@ -424,10 +439,13 @@ hasGlobalRole spec = [] /= everything (++) ([] `mkQ` f) spec
           f _ = []
 
 ---- HELPER -------------------------------------------------------------------
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

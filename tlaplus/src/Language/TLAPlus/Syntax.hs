@@ -195,6 +195,7 @@ infoE (AS_Case info _ _) = info
 {- for debugging - this ensures that we can print NoRule errors in Eval -}
 infoE _ = mkDummyInfo "ERROR-Syntax.infoE-UPDATE-NEEDED"
 
+mkDummyInfo :: SourceName -> (SourcePos, Maybe a1, Maybe a2)
 mkDummyInfo s  = (PPos.newPos s 0 0, Nothing, Nothing)
 
 infoU :: AS_UnitDef -> AS_InfoU

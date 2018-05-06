@@ -5,9 +5,8 @@ import Language.TLAPlus.Parser( mkState, expression )
 import Language.TLAPlus.Pretty (prettyPrintE, prettyPrintVA)
 import Language.TLAPlus.Syntax
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
-import Text.ParserCombinators.Parsec.Pos as PPos
 
+main :: IO ()
 main = do
   s <- getContents
   let exprAst = inlineExpr s

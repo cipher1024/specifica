@@ -1,8 +1,5 @@
 module Syntax where
 
-import Debug.Trace as Trace
-import Data.Map as Map hiding (map)
-import Data.Set as Set hiding (map)
 import Data.Generics
 
 import Text.ParserCombinators.Parsec.Pos as PPos

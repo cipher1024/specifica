@@ -35,8 +35,9 @@ rewriteWhen1 g (SH_Every info role when period hook gil) =
     [SH_Every info role (cg g when) period hook gil]
 rewriteWhen1 g (SH_Once info role when lab hook gil) =
     [SH_Once info role (cg g when) lab hook gil]
-rewriteWhen1 g x = [x]
+rewriteWhen1 _ x = [x]
 
+cg :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
 cg = combineGuards
 
 combineGuards :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
@@ -46,12 +47,16 @@ combineGuards pred Nothing    = pred
 combineGuards Nothing pred    = pred
 combineGuards  (Just (SH_ExprWrapper _ a)) (Just (SH_ExprWrapper _ b)) =
     Just $ SH_ExprWrapper upos (AS_LAND epos [a, b])
+combineGuards (Just _) (Just _) = undefined
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident = AS_Ident epos []
+-- mk_AS_Ident :: String -> AS_Expression
+-- mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

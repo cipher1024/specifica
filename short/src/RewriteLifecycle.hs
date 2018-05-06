@@ -2,13 +2,11 @@ module RewriteLifecycle where
 
 import Data.List (nub, (\\), groupBy )
 import Data.Char (toLower, toUpper)
-import qualified Data.Set as Set
 import Data.Generics
 import Data.Typeable as Typeable
 import Syntax
 import Flatten
-import TLACodeGen(mk_AS_Type, mkVar, mkView, typeKernel)
-import Debug.Trace(trace)
+import TLACodeGen(mkVar, mkView, typeKernel)
 
 import Text.Parsec.Pos as PPos
 
@@ -74,7 +72,7 @@ removeSHUTDOWN :: SH_FL_Spec -> SH_FL_Spec
 removeSHUTDOWN = everywhere (mkT f)
   where f (SH_GuardedInstrList info guard label l) =
             SH_GuardedInstrList info guard label (filter (not . isShutdown) l)
-        isShutdown (SH_I_Shutdown upos) = True
+        isShutdown (SH_I_Shutdown _) = True
         isShutdown _ = False
 
 rewriteSHUTDOWN :: SH_FL_Spec -> SH_FL_Spec
@@ -147,13 +145,15 @@ mergeCrashHandlers spec = everywhere (mkT f) spec
                  (SH_CrashHandler _ _ _ when' remoteRole' _ _ _) =
                      (wipePos when == wipePos when') &&
                      (remoteRole == remoteRole')
+                sameCrashHandler _ _ = undefined
         fuseCrashHandlers :: [SH_RoleElement] -> SH_RoleElement
         fuseCrashHandlers l@(SH_CrashHandler _ ann role when
-                                              remoteRole id hook ginstr : _) =
+                                              remoteRole id hook _ginstr : _) =
           -- NOTE kramer@acm.org reto -- subst of crash handler vars not
                                       -- needed since we use let x=cmsg.sender
           let ginstr' = concat $ concatMap getGIL l
            in SH_CrashHandler upos ann role when remoteRole id hook ginstr'
+        fuseCrashHandlers _ = undefined
         getGIL (SH_CrashHandler _ _ _ _ _ _ _ l) = [l]
         getGIL _ = []
         wipePos :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
@@ -288,7 +288,7 @@ rewriteResetNonPersistentState spec =
 addResetNonPersistentState :: SH_FL_Spec -> SH_InteractionElement
                            -> SH_InteractionElement
 addResetNonPersistentState spec = everywhere (mkT (f spec))
-    where f spec (SH_RoleDef _ name vars l) =
+    where f _spec (SH_RoleDef _ name vars l) =
               let resets = everything (++) ([] `mkQ` h) l
                   extension = SH_Extend_Hook upos
                                 (lower name)
@@ -298,6 +298,7 @@ addResetNonPersistentState spec = everywhere (mkT (f spec))
                                    resets]
                   l' = if resets == [] then [] else [extension]
                in SH_RoleDef upos name vars $ l ++ l'
+          f _ _ = undefined
           h (SH_State _p persistent (_ty, varname) init)
               | not persistent &&
                 (varname /= "g_running") =
@@ -378,6 +379,7 @@ predicateWhen predicate = everywhere (mkT (f predicate))
             Just $ SH_ExprWrapper upos pred
         addP pred (Just (SH_ExprWrapper _ p)) =
             Just $ SH_ExprWrapper upos (AS_LAND epos [pred, p])
+        addP _pred (Just _) = undefined
 
 -- FIXME kramer@acm.org reto -- perhaps make this configurable, to allow
 -- the user to manage the statespace.
@@ -439,6 +441,7 @@ crashHandlersInRole name = everything (++) ([] `mkQ` f name)
               | enclrole == name = [h]
           f _ _ = []
 
+mkCrashMsgName :: String -> String -> String
 mkCrashMsgName from to =
   "crash" ++ from ++ to -- avoid "_" in concat string due to ./sl and .tex's
                         -- interpretation as a math subscript.
@@ -459,17 +462,23 @@ appendIL0 il ginstr =
     let SH_GuardedInstrList info guard label l = ginstr
      in SH_GuardedInstrList info guard label (l ++ il)
 
+lower :: String -> String
 lower = map toLower
 
 -- capitalize the first letter
+upper :: String -> String
 upper [c] = [toUpper c]
 upper (x:xs) = toUpper x : xs
+upper [] = undefined
 
 ---- HELPER -------------------------------------------------------------------
+mk_AS_Ident :: String -> AS_Expression
 mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
+upos :: SourcePos
 upos = mkPos "foo" 0 0
+epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

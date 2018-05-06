@@ -2,17 +2,13 @@ module TraceReader where
 
 import Data.List ((\\))
 import qualified Data.List as List
-import Data.Map ((!), Map)
+import Data.Map (Map,(!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Debug.Trace as Trace
-import System.IO
-import Parser (Stmt(..), Ident(..), Expr(..), exprparser)
-import Text.Regex as Regex
+import Parser (Stmt(..), Ident(..), Expr(..))
 import Debug.Trace(trace)
 
 import ExprHelper
-import Language.TLAPlus.Eval (ThrowsError)
 
 data Decoration = Color String
                 | Style String
@@ -97,6 +93,7 @@ diffE p e1 e2 | getS e1 == getS e2 = []
         getS (AtomE s) = show s
         getS x = trace (">>>> " ++ show x) "error"
 
+diffRec :: [PathRef] -> Map Ident Expr -> Map Ident Expr -> [DiffDescr]
 diffRec p m m' =
   let km  = Map.keys m
       km' = Map.keys m'
@@ -108,6 +105,7 @@ diffRec p m m' =
               concatMap (\k -> diffE (p++[rfr k]) (m!k) (m'!k)) kchg]
    where rfr (Ident f) = RecFieldRef f
 
+diffMap :: [PathRef] -> Map Expr Expr -> Map Expr Expr -> [DiffDescr]
 diffMap p m m' =
   let km  = Map.keys m
       km' = Map.keys m'
@@ -119,6 +117,7 @@ diffMap p m m' =
               concatMap (\k -> diffE (p++[mkr k]) (m!k) (m'!k)) kchg]
    where mkr k = MapKeyRef $ ppE k Map.empty
 
+diffSet :: Path -> Set.Set Expr -> Set.Set Expr -> [DiffDescr]
 diffSet p s s' =
   let srem = Set.elems $ s  Set.\\ s'
       sadd = Set.elems $ s' Set.\\ s
@@ -128,6 +127,7 @@ diffSet p s s' =
     in concat [map (\e -> DRem Nothing p e) srem,
                 map (\e -> DAdd Nothing p e) sadd]
 
+diffSeq :: [PathRef] -> [Expr] -> [Expr] -> [DiffDescr]
 diffSeq p s s' =
   if length s == length s'
   then concatMap (\k -> diffE (p++[spr k]) (s!!k) (s'!!k)) [0..length s-1]
@@ -184,6 +184,7 @@ ppD (DAdd q p e )  = printPath p++" $\\mapsto$ +"++printQ q++" "++
 ppD (DRem q p e )  = printPath p++" $\\mapsto$ -"++printQ q++" "++
                      color "red" (ppE e Map.empty)
 
+printQ :: Maybe DDQualifier -> String
 printQ Nothing = ""
 printQ (Just AtHead) = "h"
 printQ (Just AtTail) = "e"

@@ -11,11 +11,13 @@ ISSUES
 
 module Language.TLAPlus.Parser
     (tlaspec, cfgspec, table, mkState,
-     expression, operatorDef) -- for use in australis
+     expression, operatorDef, parseFile) -- for use in australis
 where
 
 import Data.Char (isAlpha)
+import Data.Functor.Identity
 import Debug.Trace as Trace
+import Text.Parsec.Prim hiding ( try )
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language( emptyDef )
@@ -28,6 +30,11 @@ import Language.TLAPlus.ParserState
     (TLAParser, PState, mkState, pushIndent, popIndent)
 import Language.TLAPlus.Syntax
 import Language.TLAPlus.Pretty (prettyPrintE)
+
+parseFile :: TLAParser a -> FilePath -> IO (Either ParseError a)
+parseFile p fname = do
+   input <- readFile fname
+   return (runP p mkState fname input)
 
 tlaspec :: TLAParser AS_Spec
 tlaspec = do { whiteSpace
@@ -318,17 +325,21 @@ table =
               ,prefix "INSTANCE"   (op_prefix AS_INSTANCE) ] -- ?? operator
     ]
 
+binary :: String -> (AS_InfoE -> a -> a -> a) -> Assoc -> Operator Char st a
 binary  name fun = Infix (do{ p <- getPosition
                                   ; reservedOp name;
                                   ; return $ fun (mkInfo p) })
+binaryS :: String -> ((AS_InfoE, AS_Expression) -> a -> a -> a) -> Assoc -> Operator Char PState a
 binaryS name fun = Infix (do{ p <- getPosition
                                   ; reservedOp name;
                                   ; l<- try $ commaSep expressionNoAngularClose
                                   ; let fal = AS_FunArgList (mkInfo p) l
                                   ; return $ fun (mkInfo p, fal) })
+prefix :: String -> (AS_InfoE -> a -> a) -> Operator Char st a
 prefix  name fun       = Prefix (do{ p <- getPosition
                                    ; reservedOp name
                                    ; return $ fun (mkInfo p) })
+postfix :: String -> (AS_InfoE -> a -> a) -> Operator Char st a
 postfix name fun       = Postfix (do{ p <- getPosition
                                     ; reservedOp name
                                     ; return $ fun (mkInfo p) })
@@ -343,6 +354,7 @@ basicExpr = choice $ basicExprListNoAngularClose ++
 basicExprNoAngularClose :: TLAParser AS_Expression
 basicExprNoAngularClose = choice basicExprListNoAngularClose
 
+basicExprListNoAngularClose :: [ParsecT [Char] PState Identity AS_Expression]
 basicExprListNoAngularClose =
     [ parens expression
     , letExpr
@@ -731,6 +743,7 @@ cfgboolean =     do{ p <- getPosition
                    ; return $ CFG_Bool (mkCfgInfo p) False
                    }
 -------------------------------------------------------------------------------
+lexer :: P.GenTokenParser [Char] u Identity
 lexer = lexer0{P.reservedOp = rOp}
           where
             lexer0      = P.makeTokenParser tladef
@@ -803,6 +816,7 @@ lexer = lexer0{P.reservedOp = rOp}
             -- isAlphaOrUnderscore c = isAlpha c || c == '_'
             lexeme p = do { x <- p; P.whiteSpace lexer0; return x }
 
+tladef :: P.GenLanguageDef [Char] u Identity
 tladef = emptyDef {
   P.commentStart    = "(*"
 , P.commentEnd      = "*)"
@@ -870,21 +884,34 @@ tladef = emptyDef {
   where
     symbs = filter (not . isAlpha) . concat $ P.reservedOpNames tladef
 
+dot :: ParsecT [Char] u Identity String
 dot             = P.dot lexer
+parens :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
 parens          = P.parens lexer
+braces :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
 braces          = P.braces lexer
+squares :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
 squares         = P.squares lexer
 -- semiSep         = P.semiSep lexer
 -- semiSep1        = P.semiSep1 lexer
+commaSep :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
 commaSep        = P.commaSep lexer
+commaSep1 :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
 commaSep1       = P.commaSep1 lexer
 -- brackets        = P.brackets lexer
+whiteSpace :: ParsecT [Char] u Identity ()
 whiteSpace      = P.whiteSpace lexer
+symbol :: String -> ParsecT [Char] u Identity String
 symbol          = P.symbol lexer
+identifier :: ParsecT [Char] u Identity String
 identifier      = P.identifier lexer
+reserved :: String -> ParsecT [Char] u Identity ()
 reserved        = P.reserved lexer
+reservedOp :: String -> ParsecT [Char] u Identity ()
 reservedOp      = P.reservedOp lexer
 -- integer         = P.integer lexer
+natural :: ParsecT [Char] u Identity Integer
 natural         = P.natural lexer
 -- charLiteral     = P.charLiteral lexer
+stringLiteral :: ParsecT [Char] u Identity String
 stringLiteral   = P.stringLiteral lexer
