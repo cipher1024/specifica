@@ -164,23 +164,23 @@ ppStatement h (SH_MsgHandler _p ann _role when t hook any from_scope l) =
         <+> (case from_scope of
                Nothing -> empty
                Just (SH_FromMaj v, w) ->
-                 (text "from" <+> text "majority"
+                 text "from" <+> text "majority"
                   <//> parens (text v)
                   <+> (case w of Nothing -> empty
                                  Just (e, q) ->
-                                   text "where" <+> ppWhereExpr q e))
+                                   text "where" <+> ppWhereExpr q e)
                Just (SH_FromExp t e, w) ->
-                 (text "from" <+> text "expr"
+                 text "from" <+> text "expr"
                   <//> parens (text t <+> text "," <+> ppExpr e)
                   <+> (case w of Nothing -> empty
                                  Just (e, q) ->
-                                   text "where" <+> ppWhereExpr q e))
+                                   text "where" <+> ppWhereExpr q e)
                Just (SH_FromAll v, w) ->
-                 (text "from" <+> text "all"
+                 text "from" <+> text "all"
                   <//> parens (text v)
                   <+> (case w of Nothing -> empty
                                  Just (e,q) ->
-                                   text "where" <+> ppWhereExpr q e)))
+                                   text "where" <+> ppWhereExpr q e))
         <+> (case hook of
                Nothing -> empty
                (Just hcaller) -> ppHookCallerList hcaller)
@@ -250,9 +250,9 @@ ppInstr (SH_I_Reply _p t assign) =
     text "reply" <+> text t <//> parens (ppAssignList assign)
 ppInstr (SH_I_Let _p bindings) =
     align(text "let"
-      <+> (vcat (punctuate comma
+      <+> vcat (punctuate comma
                  (map ( \ (i,e) ->
-                        text i <+> text "=" <+> ppExpr e) bindings))))
+                        text i <+> text "=" <+> ppExpr e) bindings)))
 ppInstr (SH_I_Assert _p e s l) =
     text "assert" <+> parens (cat $ punctuate comma
                         ([ppExpr e, text $ show s] ++
@@ -269,7 +269,7 @@ ppInstr (SH_I_ForeignChangeState _p role var le) =
 ppInstr (SH_I_FailTLAClause _p) =
     text "failtlaclause"
 ppInstr (SH_I_SendGroup _p l) =
-    text "send-group" <+> (ppInstrList l)
+    text "send-group" <+> ppInstrList l
 ppInstr (SH_I_Break _p) =
     text "break"
 ppInstr (SH_I_Continue _p) =

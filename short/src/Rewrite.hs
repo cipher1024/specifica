@@ -65,13 +65,13 @@ rewriteTag = dropTag -- tags are no longer used beyond this weave step
 rewriteSpecialOperators :: SH_FL_Spec -> SH_FL_Spec
 rewriteSpecialOperators spec = everywhere (mkT f) spec
   where f (AS_OpApp epos (AS_Ident a b "all") l) =
-            (AS_OpApp epos (AS_Ident a b "ALL") l)
+            AS_OpApp epos (AS_Ident a b "ALL") l
         f (AS_OpApp epos (AS_Ident a b "any") l) =
-            (AS_OpApp epos (AS_Ident a b "ANY") l)
+            AS_OpApp epos (AS_Ident a b "ANY") l
         f (AS_OpApp epos (AS_Ident a b "any2") l) =
-            (AS_OpApp epos (AS_Ident a b "ANY2") l)
+            AS_OpApp epos (AS_Ident a b "ANY2") l
         f (AS_OpApp epos (AS_Ident a b "senders") l) =
-            (AS_OpApp epos (AS_Ident a b "SENDERS") l)
+            AS_OpApp epos (AS_Ident a b "SENDERS") l
         f x = x
 
 dummyI = "dummyInteraction"
@@ -85,24 +85,24 @@ addBoilerplate spec =
         d = SH_VerbTLAOp upos dummyI Nothing genOpSENDERS
      in spec { verbTLA = a : b1 : b2 : c : d : verbTLA spec }
   where genOpNullSender = inlineOperatorDef $ unlines
-           (["NullSender(msg) == [msg EXCEPT !.sender = 0]"])
+           ["NullSender(msg) == [msg EXCEPT !.sender = 0]"]
         genOpANY1 = inlineOperatorDef $ unlines
-           (["ANY(s) ==",
+            ["ANY(s) ==",
              "  IF Assert(\\A a, b \\in s: NullSender(a) = NullSender(b),",
              "              <<\"ANY(s), not all elements (other than 'sender') are equal!\", s>>)",
              "    THEN NullSender(CHOOSE e \\in s: TRUE)",
-             "    ELSE FALSE"]) -- will never reach this line
+             "    ELSE FALSE"] -- will never reach this line
         genOpANY2 = inlineOperatorDef $ unlines
-           (["ANY2(s,fieldname) ==",
+            ["ANY2(s,fieldname) ==",
              "  LET ss == { val[fieldname] : val \\in s }",
              "   IN IF Assert(\\A a, b \\in ss: a = b,",
              "                <<\"ANY2(s,fieldname), not all elements are equal!\", s, fieldname, ss>>)",
              "      THEN CHOOSE e \\in ss: TRUE",
-             "      ELSE FALSE"]) -- will never reach this line
+             "      ELSE FALSE"] -- will never reach this line
         genOpALL = inlineOperatorDef $ unlines
-           (["ALL(s) == s"])
+           ["ALL(s) == s"]
         genOpSENDERS = inlineOperatorDef $ unlines
-           (["SENDERS(s) == { m.sender : m \\in ALL(s) }"])
+           ["SENDERS(s) == { m.sender : m \\in ALL(s) }"]
 
 dropTag :: SH_FL_Spec -> SH_FL_Spec
 dropTag spec = spec { roleDecl = concat $ map remTag (roleDecl spec) }
@@ -159,8 +159,8 @@ isTaggedSend l m@(SH_I_MsgSend1 p1 role _multi _last destexpr mtype vars) msgdec
         concat $ map f tags
     where f t@(SH_Tag _ _tag_role tag_mtype any tag_to tag_vars) =
             if (    any
-                 && (elem mtype (msgTypesSendingToDestRole tag_to msgdecls)))
-            || (    (not any)
+                 && elem mtype (msgTypesSendingToDestRole tag_to msgdecls))
+            || (    not any
                  && mtype `elem` tag_mtype)
             then map (\((_t,i), e) -> (i,e)) tag_vars
             else []
@@ -202,7 +202,7 @@ rewriteMsgExtend spec = everywhere (mkT (f spec)) spec
             let exts = allExtendMsg spec from to mtype
              in SH_MsgDecl p2 from to mtype (vars ++ exts)
         allExtendMsg spec from to mtype =
-            everything (++) ([] `mkQ` (h from to mtype)) spec
+            everything (++) ([] `mkQ` h from to mtype) spec
           where h from to mtype (SH_Extend_Msg _ from2 to2 mtype2 l)
                       -- Eq will otherwise incl the position info
                     | (show $ ppTy from) == (show $ ppTy from2) &&
@@ -220,8 +220,8 @@ typeKernel (SH_Ty_UserDefOrNIL _ t) = typeKernel t
 typeKernel (SH_Ty_Expr _ t) = ["anSH_Ty_Expr"]
 typeKernel (SH_Ty_SetOf _ t) = typeKernel t
 typeKernel (SH_Ty_SeqOf _ t) = typeKernel t
-typeKernel (SH_Ty_PairOf _ tA tB) = (typeKernel tA) ++ (typeKernel tB)
-typeKernel (SH_Ty_Map _ tA tB) = (typeKernel tA) ++ (typeKernel tB)
+typeKernel (SH_Ty_PairOf _ tA tB) = typeKernel tA ++ typeKernel tB
+typeKernel (SH_Ty_Map _ tA tB) = typeKernel tA ++ typeKernel tB
 typeKernel (SH_Ty_Enum _ l) = l
 
 ---- HELPER -------------------------------------------------------------------

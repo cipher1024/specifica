@@ -20,7 +20,7 @@ rewriteWhen0 (SH_WhenBlock _ guard l) =
     concat $ map (rewriteWhen1 (Just guard)) l
 rewriteWhen0 x = [x]
 
-rewriteWhen1 :: (Maybe SH_ExprWrapper) -> SH_RoleElement -> [SH_RoleElement]
+rewriteWhen1 :: Maybe SH_ExprWrapper -> SH_RoleElement -> [SH_RoleElement]
 rewriteWhen1 g (SH_WhenBlock _ guard l) =
     concat $ map (rewriteWhen1 (combineGuards g (Just guard))) l
 rewriteWhen1 g (SH_MsgHandler info ann role when mtype lab any from gil) =
@@ -39,8 +39,8 @@ rewriteWhen1 g x = [x]
 
 cg = combineGuards
 
-combineGuards :: (Maybe SH_ExprWrapper) -> (Maybe SH_ExprWrapper)
-              -> (Maybe SH_ExprWrapper)
+combineGuards :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
+              -> Maybe SH_ExprWrapper
 combineGuards Nothing Nothing = Nothing
 combineGuards pred Nothing    = pred
 combineGuards Nothing pred    = pred

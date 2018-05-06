@@ -26,7 +26,7 @@ rewriteONCE spec = everywhere (mkT f) spec
                                        (SH_Once _ _ _ _ _ _) -> True
                                        _ -> False) l
           -- No guard case
-          replONCE (rname) (SH_Once _ role when label hooks ginstr) =
+          replONCE rname (SH_Once _ role when label hooks ginstr) =
               let w = AS_LAND epos $
                         [AS_PrefixOP epos AS_Not
                             (mk_AS_Ident (name_once label))] ++

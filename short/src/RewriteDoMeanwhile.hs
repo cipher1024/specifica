@@ -103,9 +103,9 @@ labelAwait l =
         mkL i = "wp_" ++ show i
         numberAwaits l = numberAwaits0 0 l []
         numberAwaits0 n [] acc = acc
-        numberAwaits0 n [(SH_I_Await _ _)] acc = acc ++ [n+1]
+        numberAwaits0 n [SH_I_Await _ _] acc = acc ++ [n+1]
         numberAwaits0 n [_] acc = acc ++ [n]
-        numberAwaits0 n ((SH_I_Await _ _):rest) acc =
+        numberAwaits0 n (SH_I_Await _ _ : rest) acc =
             numberAwaits0 (n+1) rest (acc ++ [n+1])
         numberAwaits0 n (_:rest) acc =
             numberAwaits0 n rest (acc ++ [n])

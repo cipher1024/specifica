@@ -34,9 +34,9 @@ readSLA fname =
                       ('a':'l':'t':'.':fn) -> reverse fn ++ ".sla"
                       _ -> fname ++ ".sla"
       ; cfg <- catch (readFile cfgname) errorHandler -- cfg is optional
-      ; case (runParser cfgspec mkState cfgname cfg) of
+      ; case runParser cfgspec mkState cfgname cfg of
           Left err -> do{ let err' = "cfg configuration parse error at " ++
-                                     (show err)
+                                     show err
                         ; return $ Left err'
                         }
           Right cfg  ->
@@ -44,7 +44,7 @@ readSLA fname =
               ; readTLA slaname >>= \res -> case res of
                   Left err ->
                     do{ let err' = "Swimlane annotation parse error at " ++
-                                   (show err)
+                                   show err
                       ; return $ Left err'
                       }
                   Right tlaspecs ->
@@ -55,7 +55,7 @@ readSLA fname =
                           -- FIXME only one ASSUME clause, introduce
                           -- "EVAL" keyword in SLA file, or better use
                           -- SLA == ...
-                          Right (env, [(VA_Rec m)]) ->
+                          Right (env, [VA_Rec m]) ->
                             case Map.lookup (VA_String "messages") m of
                               Just g@(VA_FunctionDef _ _ _ _) ->
                                 let slafun = wrapSLAFun env g
@@ -105,7 +105,7 @@ wrapStateFun globalenv (VA_FunctionDef _info _head _qbounds expr) =
                       hidediff = extractElemSet m "hidediff" HideDiff
                    in Just $ label ++ labelfont ++ style ++ hidediff
               Right other ->
-                  Trace.trace ("Expect record, found "++(prettyPrintVA other))
+                  Trace.trace ("Expect record, found "++prettyPrintVA other)
                        Nothing
               Left err ->
                 Trace.trace ("ERROR evaluating state decoration function: "++
@@ -211,7 +211,7 @@ readTLA fname =
              in mapM readTLA l'' >>= \as ->
                let as' = filter (\case
                                     Left err -> Trace.trace
-                                                ("[error] "++(show err))
+                                                ("[error] "++show err)
                                                 False
                                     Right _ -> True) as
                 in return $

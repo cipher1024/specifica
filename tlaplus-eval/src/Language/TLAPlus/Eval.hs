@@ -23,7 +23,7 @@ eval specs cfg = evalReturnEnv specs cfg >>= \(_, vs) -> return vs
 
 evalReturnEnv :: [AS_Spec] -> CFG_Config -> ThrowsError (Env, [VA_Value])
 evalReturnEnv specs cfg =
-    do{ let bindings = map (mkBinding ("foospec")) (cfg_constants cfg)
+    do{ let bindings = map (mkBinding "foospec") (cfg_constants cfg)
       ; env <- foldM (\e b -> bind e b) mkEmptyEnv bindings
       ; env' <- addBuiltIn env -- FIXME make module extend specific
       ; let units = concat $ map unitDef specs
@@ -135,9 +135,9 @@ evalE env _e@(AS_FunctionType _info a b) =
       ; b' <- evalET env b
       ; return $ VA_FunType a' b'
       }
-evalE env e@(AS_PrefixOP _info op a) = (evalOpPrefix env op) e a
-evalE env e@(AS_PostfixOP _info op a) = (evalOpPostfix env op) e a
-evalE env e@(AS_InfixOP _info op a b) = (evalOpInfix env op) e a b
+evalE env e@(AS_PrefixOP _info op a) = evalOpPrefix env op e a
+evalE env e@(AS_PostfixOP _info op a) = evalOpPostfix env op e a
+evalE env e@(AS_InfixOP _info op a b) = evalOpInfix env op e a b
 evalE env _e@(AS_Let _info units expr) =
     do{ env' <- foldM (\env u -> evalU env u >>= \v ->
                          bind env (nameU u, v)
@@ -174,8 +174,8 @@ evalE env e@(AS_Quantified _info qkind [qbound] expr) = -- FIXME singleton!
                        return $ VA_Bool False
                      Left msg -> throwError msg
                  ) envs
-      ; let b = (quant qkind) (\(VA_Bool v) -> v) bvs
-      ; return $ (VA_Bool b)
+      ; let b = quant qkind (\(VA_Bool v) -> v) bvs
+      ; return $ VA_Bool b
       }
     where quant AS_All   = all
           quant AS_Exist = any
@@ -292,10 +292,10 @@ eval_dot op loc@(env, _parent, _, b) va =
          (AS_Ident _info [] name) ->
            op_dot loc va (VA_String name)
          _ ->
-           do{ vb <- (evalET env b)
+           do{ vb <- evalET env b
              ; infix_op op loc va vb
              }
-  else do{ vb <- (evalET env b)
+  else do{ vb <- evalET env b
          ; infix_op op loc va vb
          }
 
@@ -313,14 +313,14 @@ evalOpInfix :: Env
 evalOpInfix env _op@AS_EQ _parent
             (AS_PostfixOP _ AS_Prime a@(AS_Ident _ [] _i)) b =
     evalET env a >>= \case
-      (VA_Var _) -> do{ vb <- (evalET env b)
+      (VA_Var _) -> do{ vb <- evalET env b
                       ; env' <- replace env (a, vb)
                       ; Trace.trace (ppEnv env') $ return vb
                       }
       _ -> error "unspecified"
 evalOpInfix env op@AS_EQ parent a@(AS_Ident _ [] _i) b =
     evalET env a >>= \va -> case va of
-      (VA_Var _) -> do{ vb <- (evalET env b)
+      (VA_Var _) -> do{ vb <- evalET env b
                       ; env' <- replace env (a, vb)
                       ; Trace.trace (ppEnv env') $ return vb
                       }
@@ -337,11 +337,11 @@ evalOpInfix env op@AS_EQ parent a@(AS_Ident _ [] _i) b =
             --   LET B == {1,2} S == {[t: {"S1"}, b: B], [t: {"S2"}, b: B]}
             --    IN { a.t : a \in S }
           (VA_RecType _m) -> eval_dot op (env, parent, a, b) va
-          _ -> do{ vb <- (evalET env b)
+          _ -> do{ vb <- evalET env b
                          ; infix_op op (env, parent, a, b) va vb
                          }
 evalOpInfix env op parent a b =
-  do{ va <- (evalET env a)
+  do{ va <- evalET env a
     ; case va of
         {-- In TLA+ r.a and r."a" (so is r["a"], but r[a] is not) are the
         same if r is a record. All the quoted forms work well without
@@ -354,7 +354,7 @@ evalOpInfix env op parent a b =
           --   LET B == {1,2} S == {[t: {"S1"}, b: B], [t: {"S2"}, b: B]}
           --    IN { a.t : a \in S }
         (VA_RecType _m) -> eval_dot op (env, parent, a, b) va
-        _ -> do{ vb <- (evalET env b)
+        _ -> do{ vb <- evalET env b
                        ; infix_op op (env, parent, a, b) va vb
                        }
     }
@@ -397,37 +397,37 @@ evalOpPostfix env op parent e = evalET env e >>= postfix_op op (parent, e)
 infix_op_table ::
     [(AS_InfixOp, Infix_Info -> VA_Value -> VA_Value -> ThrowsError VA_Value)]
 infix_op_table =
-  [ (AS_Plus, (op_plus)), (AS_Minus, (op_minus)),
-    (AS_Mult, (op_mult))
-  , (AS_Cup, (op_cup)), (AS_Cap, (op_cap))
-  , (AS_EQ, (op_eq)), (AS_NEQ, (op_neq)), (AS_LT, (op_lt)),
-    (AS_LTEQ, (op_lteq)), (AS_GT, (op_gt))
-  , (AS_COLONGT, (op_colongt)), (AS_ATAT, (op_atat))
-  , (AS_DOTDOT, (op_dotdot))
-  , (AS_DOT, (op_dot))
-  , (AS_SetMinus, (op_setminus))
-  , (AS_SubsetEq, (op_subseteq))
-  , (AS_In, (op_in))
-  , (AS_NotIn, (op_notin))
-  , (AS_Times, (op_times))
-  , (AS_AND, (op_and))
-  , (AS_OR, (op_or))
-  , (AS_FunApp, (op_funapp))
+  [ (AS_Plus, op_plus), (AS_Minus, op_minus),
+    (AS_Mult, op_mult)
+  , (AS_Cup, op_cup), (AS_Cap, op_cap)
+  , (AS_EQ, op_eq), (AS_NEQ, op_neq), (AS_LT, op_lt),
+    (AS_LTEQ, op_lteq), (AS_GT, op_gt)
+  , (AS_COLONGT, op_colongt), (AS_ATAT, op_atat)
+  , (AS_DOTDOT, op_dotdot)
+  , (AS_DOT, op_dot)
+  , (AS_SetMinus, op_setminus)
+  , (AS_SubsetEq, op_subseteq)
+  , (AS_In, op_in)
+  , (AS_NotIn, op_notin)
+  , (AS_Times, op_times)
+  , (AS_AND, op_and)
+  , (AS_OR, op_or)
+  , (AS_FunApp, op_funapp)
   ]
 
 prefix_op_table :: [(AS_PrefixOp,
                      Prefix_Info -> VA_Value -> ThrowsError VA_Value)]
 prefix_op_table =
-  [ (AS_SUBSET, (op_subset))
-  , (AS_UNION,  (op_union))
-  , (AS_DOMAIN, (op_domain))
-  , (AS_Not, (op_not))
+  [ (AS_SUBSET, op_subset)
+  , (AS_UNION,  op_union)
+  , (AS_DOMAIN, op_domain)
+  , (AS_Not, op_not)
   ]
 
 postfix_op_table :: [(AS_PostfixOp,
                      Postfix_Info -> VA_Value -> ThrowsError VA_Value)]
 postfix_op_table =
-  [ (AS_Prime, (op_prime)) ]
+  [ (AS_Prime, op_prime) ]
 
 -- infix
 op_plus _i (VA_Int a) (VA_Int b) = return $ VA_Int $ a + b
@@ -597,7 +597,7 @@ op_funapp i va argv@(VA_FunArgList argvaluelist) =
          ; envir' <- foldM (\env (n,v) -> bind env (n,v)) env
                            (zip argnames argvaluelist)
          ; mapM_ (\(AS_QBoundN [i] range) ->
-             do{ let qe = (AS_InfixOP _info AS_In i range)
+             do{ let qe = AS_InfixOP _info AS_In i range
                ; evalET envir' qe >>= \r ->
                    case r of
                      VA_Bool True  -> return ()
@@ -648,7 +648,7 @@ op_union i (VA_Set s) =
           (VA_Set _) ->
               do{ l <- foldM (\acc v ->
                     case v of
-                      (VA_Set s') -> return $ acc ++ (elems s')
+                      (VA_Set s') -> return $ acc ++ elems s'
                       _ ->
                         let (e, a) = i
                          in throwError $
@@ -727,7 +727,7 @@ list_bool e env f exprs =
                                IllegalType e c v TY_Bool "conditional"
                     ) exprs
       ; let b = f (\(VA_Bool b) -> b) bvs
-      ; return $ (VA_Bool b)
+      ; return $ VA_Bool b
       }
 
 ----------------------
@@ -780,8 +780,8 @@ ppError (UnknownOperatorError s) = s
 ppError (TypeMissmatch (_env, pE, ea, eb) va vb expectedTypes) =
     pp $ nest 4 $ (text $ ppLocE pE) <//> text ":" <$>
            nest 4 (text "Type missmatch. Expected types" <+>
-                   (cat (punctuate comma $ map (\ty -> text $ ppTY ty)
-                                               expectedTypes)) <//>
+                   cat (punctuate comma $ map (\ty -> text $ ppTY ty)
+                                               expectedTypes) <//>
                    text ", but found" <+>
                    text (ppTY $ typeOf va) <//> text ", and" <+>
                    text (ppTY $ typeOf vb) <+>
@@ -819,7 +819,7 @@ ppError (ValueOutOfBounds i q fappl val env) =
                        <$> ppVA val)
            <$> nest 4 (text "in context" -- FIXME only show free vars in q
                        <$> vcat (map (\(id, v) ->
-                                   (ppId id) <+> text "==>" <+> ppVA v) env))
+                                   ppId id <+> text "==>" <+> ppVA v) env))
 ppError (ChooseNoMatch i q expr values env) =
     pp $ nest 4 $ (text $ ppLocE i) <//> text ":"
            <$> text "no value of" <+> parens (ppE i) <+>
@@ -829,7 +829,7 @@ ppError (ChooseNoMatch i q expr values env) =
                        <$> vcat (map ppVA values))
            <$> nest 4 (text "in context" -- FIXME only show free vars in expr
                        <$> vcat (map (\(id, v) ->
-                                   (ppId id) <+> text "==>" <+> ppVA v) env))
+                                   ppId id <+> text "==>" <+> ppVA v) env))
 ppError (KeyNotFound _env e idx map kind) =
     pp $ nest 4 $ (text $ ppLocE e) <//> text ":"
            <$> text "key" <+> parens (ppVA idx) <+>
@@ -899,7 +899,7 @@ ppEnv :: Env -> String
 ppEnv env =
   pp $ nest 4 (text "Environment"
          <$> vcat (map (\(id, v) ->
-                   (ppId id) <+> text "==>" <+> ppVA v) env))
+                   ppId id <+> text "==>" <+> ppVA v) env))
 
 addBuiltIn :: Env -> ThrowsError Env
 addBuiltIn e =
@@ -946,7 +946,7 @@ bif_Assert env =
           if b
             then return $ VA_Bool True
             else let o = bifArg env "out"
-                  in throwError $ Default ("Assertion violation "++(show o))
+                  in throwError $ Default ("Assertion violation "++ show o)
       other  -> throwError $
         Default ("BIF Assert - wrong type of argument "++show other)
 

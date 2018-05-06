@@ -24,7 +24,7 @@ main =
                       ('a':'l':'t':'.':fn) -> reverse fn ++ ".cfg"
                       otherwise -> fname ++ ".cfg"
       ; cfg <- readFile $ cfgname
-      ; case (runParser cfgspec mkState cfgname cfg) of
+      ; case runParser cfgspec mkState cfgname cfg of
           Left err -> do{ putStr "cfg configuration parse error at "
                         ; print err
                         ; exitFailure

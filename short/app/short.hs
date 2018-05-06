@@ -1,3 +1,5 @@
+{-# language LambdaCase #-}
+
 module Main where
 
 import Data.Char (toLower)
@@ -34,12 +36,11 @@ main = do
   l <- mapM readAndParse snames
   let e =
         filter
-          (\en ->
-             case en of
+          (\case
                (Left err) -> True
                _ -> False)
           l
-  if length e > 0
+  if not (null e)
     then do
       let (Left err) = head e
       putStrLn ("ERROR: " ++ show err)
@@ -50,7 +51,7 @@ main = do
         (\(Right (SH_Spec name cl)) ->
            putStrLn $ prettyPrintSH $ SH_Spec name cl)
         l
-      let l' = concat $ map (\(Right (SH_Spec name cl)) -> cl) l
+      let l' = concatMap (\(Right (SH_Spec name cl)) -> cl) l
       let merged = merge l'
       let (Right (SH_Spec pname _)) = head l
       putStrLn "--------"
@@ -147,6 +148,4 @@ main = do
                --; genCFGFile (map toLower pname) m
 
 readAndParse :: String -> IO (Either ParseError SH_Spec)
-readAndParse fname = do
-  fcontent <- readFile fname
-  return (runParser shortspec mkState fname fcontent)
+readAndParse fname = runParser shortspec mkState fname <$> readFile fname

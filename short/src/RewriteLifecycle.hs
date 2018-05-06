@@ -38,7 +38,7 @@ addStutterIfNothingRunning spec =
     then let g = SH_RoleDef upos "GLOBAL" [] []
              spec' = if hasGlobalRole spec
                      then spec
-                     else spec { roleDecl = g : (roleDecl spec) }
+                     else spec { roleDecl = g : roleDecl spec }
           in everywhere (mkT f) spec'
     else spec
   where f (SH_RoleDef _ "GLOBAL" vars l) =
@@ -62,12 +62,12 @@ addStutterIfNothingRunning spec =
                                      (mk_AS_Ident role)]
              in AS_Quantified epos AS_All bounds $
                   AS_PrefixOP epos AS_Not $
-                    (AS_InfixOP epos AS_DOT
+                    AS_InfixOP epos AS_DOT
                        (AS_InfixOP epos AS_FunApp
                           (mk_AS_Ident $ mkVar role)
                           (AS_FunArgList epos
                              [mk_AS_Ident $ lower role]))
-                       (mk_AS_Ident "g_running"))
+                       (mk_AS_Ident "g_running")
 
 -- FIXME kramer@acm.org reto -- cop out. Should really remove this instr!
 removeSHUTDOWN :: SH_FL_Spec -> SH_FL_Spec
@@ -105,7 +105,7 @@ rewriteSHUTDOWN spec = everywhere (mkT f) spec
               if hasShutdown l
               then appendIL (genLastActions spec (upper role)) l
               else l
-            where hasShutdown l = (everything (++) ([] `mkQ` h)) l /= []
+            where hasShutdown l = everything (++) ([] `mkQ` h) l /= []
                   h (SH_I_Shutdown _) = [True]
                   h _ = []
 
@@ -119,7 +119,7 @@ addCrashMsgDecl spec =
                                              (mkCrashMsgName r $ upper hr) [])
                                    hrl)
                     (crashableRoles spec)
-     in spec { msgDecl = (msgDecl spec) ++ (concat mlist) }
+     in spec { msgDecl = msgDecl spec ++ concat mlist }
 
 rewriteCrashHandlers :: SH_FL_Spec -> SH_FL_Spec
 rewriteCrashHandlers spec = everywhere (mkT f) spec
@@ -148,15 +148,15 @@ mergeCrashHandlers spec = everywhere (mkT f) spec
                      (wipePos when == wipePos when') &&
                      (remoteRole == remoteRole')
         fuseCrashHandlers :: [SH_RoleElement] -> SH_RoleElement
-        fuseCrashHandlers l@((SH_CrashHandler _ ann role when
-                                              remoteRole id hook ginstr):_) =
+        fuseCrashHandlers l@(SH_CrashHandler _ ann role when
+                                              remoteRole id hook ginstr : _) =
           -- NOTE kramer@acm.org reto -- subst of crash handler vars not
                                       -- needed since we use let x=cmsg.sender
           let ginstr' = concat $ concatMap getGIL l
            in SH_CrashHandler upos ann role when remoteRole id hook ginstr'
         getGIL (SH_CrashHandler _ _ _ _ _ _ _ l) = [l]
         getGIL _ = []
-        wipePos :: (Maybe SH_ExprWrapper) -> (Maybe SH_ExprWrapper)
+        wipePos :: Maybe SH_ExprWrapper -> Maybe SH_ExprWrapper
         wipePos l = everywhere (mkT f) l
             where f x | Typeable.typeOf x ==
                         Typeable.typeOf upos = -- i.e. is it a SourcePos?
@@ -200,19 +200,19 @@ rewriteRole spontanousCrashers spec ie = everywhere (mkT (f spec)) ie
                          (AS_InfixOP epos AS_EQ
                           (mk_AS_Ident "g_lifecycle")
                           (AS_InfixOP epos AS_Plus
-                             (AS_OldVal)
+                             AS_OldVal
                              (AS_Num epos 1)))]
                 crasher = if elem name spontanousCrashers
                           then [SH_CallHandler upos (lower name)
-                                 (Just $ (SH_ExprWrapper upos
+                                 (Just $ SH_ExprWrapper upos
                                            (AS_LAND epos [
-                                             (mk_AS_Ident "g_running"),
-                                             (AS_InfixOP epos AS_LT
+                                             mk_AS_Ident "g_running",
+                                             AS_InfixOP epos AS_LT
                                                 (mk_AS_Ident "g_lifecycle")
-                                                (AS_Num epos 2)),
+                                                (AS_Num epos 2),
                                              AS_InfixOP epos AS_In
                                                 (mk_AS_Ident $ lower name)
-                                                (mk_AS_Ident ("Crash" ++ name))])))
+                                                (mk_AS_Ident ("Crash" ++ name))]))
                                  ("do_crash_" ++ name) []
                                 -- we offer a well know hook name to allow for
                                 -- extensions
@@ -236,13 +236,13 @@ rewriteRole spontanousCrashers spec ie = everywhere (mkT (f spec)) ie
                 -- let each role instance start at most once to avoid flapping
                 starter = if  elem name spontanousCrashers
                           then [SH_CallHandler upos (lower name)
-                                 (Just $ (SH_ExprWrapper upos
+                                 (Just $ SH_ExprWrapper upos
                                            (AS_LAND epos [
-                                             (AS_PrefixOP epos AS_Not
-                                                  (mk_AS_Ident "g_running")),
-                                             (AS_InfixOP epos AS_LT
+                                             AS_PrefixOP epos AS_Not
+                                                  (mk_AS_Ident "g_running"),
+                                             AS_InfixOP epos AS_LT
                                                 (mk_AS_Ident "g_lifecycle")
-                                                (AS_Num epos 2))])))
+                                                (AS_Num epos 2)]))
                                  ("do_start_" ++ name) []
                                 -- we offer a well know hook name to allow for
                                 -- extensions
@@ -264,7 +264,7 @@ rewriteRole spontanousCrashers spec ie = everywhere (mkT (f spec)) ie
                                     [SH_I_FailTLAClause upos]]]
                           else []
              in SH_RoleDef upos name vars $
-                  (predicateWhen (mk_AS_Ident "g_running") l) ++
+                  predicateWhen (mk_AS_Ident "g_running") l ++
                     [st, lifec] ++ crasher ++ starter
         f _ x = x
 
@@ -299,7 +299,7 @@ addResetNonPersistentState spec ie = everywhere (mkT (f spec)) ie
                   l' = if resets == [] then [] else [extension]
                in SH_RoleDef upos name vars $ l ++ l'
           h (SH_State _p persistent (_ty, varname) init)
-              | (not persistent) &&
+              | not persistent &&
                 (varname /= "g_running") =
                   -- we know rewriteStateInit has filled in the
                   -- init expression (see short).
@@ -393,22 +393,22 @@ spontanousCrashers spec =
 
 crashableRoles :: SH_FL_Spec -> [String]
 crashableRoles spec =
-    nub $ (crashHandled spec) ++ (containsShutdown spec) ++
-          (startExtension spec)
+    nub $ crashHandled spec ++ containsShutdown spec ++
+          startExtension spec
 
 crashHandled :: SH_FL_Spec -> [String]
-crashHandled spec = (everything (++) ([] `mkQ` f)) spec
+crashHandled spec = everything (++) ([] `mkQ` f) spec
     where f (SH_CrashHandler _ _ _enclrole _ rolename _ _ _) = [rolename]
           f _ = []
 
 startExtension :: SH_FL_Spec -> [String]
-startExtension spec = (everything (++) ([] `mkQ` f)) spec
+startExtension spec = everything (++) ([] `mkQ` f) spec
     where f (SH_RoleDef _ name _ l) = if containsStartExtension0 name l /= []
                                       then [name]
                                       else []
           f _ = []
           containsStartExtension0 :: String -> [SH_RoleElement] -> [Bool]
-          containsStartExtension0 r l = (everything (++) ([] `mkQ` (f r))) l
+          containsStartExtension0 r l = everything (++) ([] `mkQ` f r) l
             where f r (SH_Extend_Hook _ _ l _) =
                       let a = any (\(SH_HookCallee _ h _) ->
                                     "hook_do_start_" ++ r == h)
@@ -417,24 +417,24 @@ startExtension spec = (everything (++) ([] `mkQ` f)) spec
                   f _ _ = []
 
 containsShutdown :: SH_FL_Spec -> [String]
-containsShutdown spec = (everything (++) ([] `mkQ` f)) spec
+containsShutdown spec = everything (++) ([] `mkQ` f) spec
     where f (SH_RoleDef _ name _ l) = if containsShutdown0 l /= []
                                       then [name]
                                       else []
           f _ = []
           containsShutdown0 :: [SH_RoleElement] -> [Bool]
-          containsShutdown0 l = (everything (++) ([] `mkQ` f)) l
+          containsShutdown0 l = everything (++) ([] `mkQ` f) l
             where f (SH_I_Shutdown _) = [True]
                   f _ = []
 
 crashHandlingRolesFor :: SH_FL_Spec -> String -> [String]
-crashHandlingRolesFor spec name = (everything (++) ([] `mkQ` f)) spec
+crashHandlingRolesFor spec name = everything (++) ([] `mkQ` f) spec
     where f (SH_CrashHandler _ _ enclrole _ rolename _ _ _)
               | rolename == name = [enclrole]
           f _ = []
 
 crashHandlersInRole :: String -> SH_FL_Spec -> [SH_RoleElement]
-crashHandlersInRole name spec = (everything (++) ([] `mkQ` (f name))) spec
+crashHandlersInRole name spec = everything (++) ([] `mkQ` f name) spec
     where f name h@(SH_CrashHandler _ _ enclrole _ _rolename _ _ _)
               | enclrole == name = [h]
           f _ _ = []
@@ -463,7 +463,7 @@ lower = map toLower
 
 -- capitalize the first letter
 upper [c] = [toUpper c]
-upper (x:xs) = (toUpper x : xs)
+upper (x:xs) = toUpper x : xs
 
 ---- HELPER -------------------------------------------------------------------
 mk_AS_Ident s = AS_Ident epos [] s

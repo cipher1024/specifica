@@ -150,12 +150,12 @@ config = unsafePerformIO $
                 configvar = getConfigVariable flags,
                 xunit_mm = getXUnits flags,
                 yunit_mm = getYUnits flags }
-  where getDensity :: [Flag] -> IO (DensityOption)
+  where getDensity :: [Flag] -> IO DensityOption
         getDensity [] = return All -- default is All
-        getDensity ((Density "all"):_rest)     = return All
-        getDensity ((Density "compact"):_rest) = return Compact
-        getDensity ((Density ups):_rest)       =
-            ioError (userError ("unknown density "++(show ups)++
+        getDensity (Density "all":_rest)     = return All
+        getDensity (Density "compact":_rest) = return Compact
+        getDensity (Density ups:_rest)       =
+            ioError (userError ("unknown density "++show ups++
                                 ", must be all or compact"))
         getDensity (_:rest) = getDensity rest
 
@@ -189,13 +189,13 @@ config = unsafePerformIO $
         getRightWidth (RightWidth intstr:_) = read intstr
         getRightWidth (_:rest)              = getRightWidth rest
 
-        getInputfile :: [String] -> IO (String)
-        getInputfile []    = ioError (userError ("missing input file name"))
+        getInputfile :: [String] -> IO String
+        getInputfile []    = ioError (userError "missing input file name")
         getInputfile (f:_) = return f -- take first name
 
         getOutputfile :: [Flag] -> IO (Maybe String)
         getOutputfile []             = return Nothing
-        getOutputfile ((Output f):_) = return $ Just f
+        getOutputfile (Output f:_) = return $ Just f
         getOutputfile (_:rest)       = getOutputfile rest
 
         getAnnotationFile :: [Flag] -> Maybe String
@@ -269,7 +269,7 @@ config = unsafePerformIO $
 
 version = "Swimlane (sl), version \"0.2a\""
 help = "Swimlane (sl) renders a TLC counterexample as a LaTeX/pstricks "++
-       "pspicture file.\n" ++ (usageInfo "\nUsage:" options)
+       "pspicture file.\n" ++ usageInfo "\nUsage:" options
 
 data PrintLevel = PNote | PWarning | PError
 say :: PrintLevel -> String -> IO ()
@@ -400,15 +400,15 @@ main = do argv <- getArgs
                                          Just _ -> True
                            in
                            [to_pstricks_graph_open numlanes m
-                              (True) -- FIXME check .sla file
+                              True -- FIXME check .sla file
                               ((snotes /= Map.empty) || hasSaf)
                               issue,
                             indent "  "
-                            ((to_pstricks_graph_preamble numlanes m)++
+                            (to_pstricks_graph_preamble numlanes m++
                              subgraphs++
-                             (to_pstricks_interactions
+                             to_pstricks_interactions
                                 defaultMsgNotes m arrowtips abbrev
-                                allstateidx spiderweb)),
+                                allstateidx spiderweb),
                             to_pstricks_graph_close argv]
              in  do let content = unlines $ concat out
                      in case output config of
@@ -448,44 +448,44 @@ main = do argv <- getArgs
                 -- renumber lt =
                 --     let t = List.map (\(i,egrp) -> egrp) lt
                 --      in numberlist t
-                mapannIS :: String -> Expr -> (Map Int String)
+                mapannIS :: String -> Expr -> Map Int String
                 mapannIS name (RecE ann) =
                     case Map.null ann of
                       True  -> Map.empty
                       False -> case Map.member (Ident name) ann of
-                                 True  -> let MapE mape = ann!(Ident name)
+                                 True  -> let MapE mape = ann ! Ident name
                                            in mapIS mape
                                  False -> Map.empty
-                  where mapIS :: (Map Expr Expr) -> (Map Int String)
+                  where mapIS :: Map Expr Expr -> Map Int String
                         mapIS map_e =
                             let m'  = Map.mapKeys (\(IntE i) -> i) map_e
                              in Map.map (\(StrE s) -> s) m'
                 mapannIS _ _ = error "undefined"
-                mapannAbbrev :: String -> Expr -> (Map String String)
+                mapannAbbrev :: String -> Expr -> Map String String
                 mapannAbbrev name (RecE ann) =
                     case Map.null ann of
                       True  -> Map.empty
                       False -> case Map.member (Ident name) ann of
-                                 True  -> let MapE mape = ann!(Ident name)
+                                 True  -> let MapE mape = ann ! Ident name
                                            in mapAB mape
                                  False -> Map.empty
-                  where mapAB :: (Map Expr Expr) -> (Map String String)
+                  where mapAB :: Map Expr Expr -> Map String String
                         mapAB map_e =
                             let m'  = Map.mapKeys (\(StrE i) -> i) map_e
                              in Map.map (\(StrE s) -> s) m'
                 mapannAbbrev _ _ = error "unspecified"
-                mapannPIS :: String -> Expr -> (Map (Int,Int) String)
+                mapannPIS :: String -> Expr -> Map (Int,Int) String
                 mapannPIS name (RecE ann) =
                     case Map.null ann of
                       True  -> Map.empty
                       False -> case Map.member (Ident name) ann of
-                                 True  -> let MapE mape = ann!(Ident name)
+                                 True  -> let MapE mape = ann ! Ident name
                                            in mapPIS mape
                                  False -> Map.empty
-                  where mapPIS :: (Map Expr Expr) -> (Map (Int,Int) String)
+                  where mapPIS :: Map Expr Expr -> Map (Int,Int) String
                         mapPIS map_e =
                             let m'  = Map.mapKeys
-                                        (\(SeqE [(IntE i),(IntE j)]) -> (i,j))
+                                        (\(SeqE [IntE i,IntE j]) -> (i,j))
                                         map_e
                              in Map.map (\(StrE s) -> s) m'
                 mapannPIS _ _ = error "undefined"
@@ -517,37 +517,37 @@ type MsgNotes = Map (Int,Int) String
 
 toTrace :: [Expr] -> Trace
 toTrace l = Prelude.map f l
-  where f (RecE rec) = let AtomE sl    = rec!(Ident "swimlane")
-                           SetE events = rec!(Ident "events")
+  where f (RecE rec) = let AtomE sl    = rec ! Ident "swimlane"
+                           SetE events = rec ! Ident "events"
                         in mkE sl events
         f _ = error "unspecified"
 mkE :: String -> Set Expr -> EventGrp
 mkE swimlane exprset = EventGrp swimlane (Set.map f exprset)
    where f (RecE r) | Map.member (Ident "msg") r =
-           case r!(Ident "msg") of
-             SeqE _msg -> let StrE etype = r!(Ident "etype")
-                              SeqE tuple = r!(Ident "msg")
+           case r ! Ident "msg" of
+             SeqE _msg -> let StrE etype = r ! Ident "etype"
+                              SeqE tuple = r ! Ident "msg"
                               RecE msg = head tuple
                               SetE destset = (head.tail) tuple
                               dest = Set.map (\(AtomE d) -> d) destset
                           in MultiSendEvent r etype msg dest
-             RecE _msg -> let StrE etype = r!(Ident "etype")
-                              RecE msg = r!(Ident "msg")
+             RecE _msg -> let StrE etype = r ! Ident "etype"
+                              RecE msg = r ! Ident "msg"
                           in SingleSendEvent r etype msg
              _ -> error "unspecified"
          f (RecE r) | Map.member (Ident "msgs") r =
-           let StrE etype = r!(Ident "etype")
-               SetE msgsrece = r!(Ident "msgs")
+           let StrE etype = r ! Ident "etype"
+               SetE msgsrece = r ! Ident "msgs"
                msgs = Set.map (\(RecE msg) -> msg) msgsrece
             in MultiRecvEvent r etype msgs
          f (RecE r) =
-           let StrE etype = r!(Ident "etype")
+           let StrE etype = r ! Ident "etype"
             in NoMessageEvent r etype
          f _ = error "unspecified"
 
 numberlist :: Trace -> LabeledTrace
 numberlist l           = numberlist0 (1::Int) l
-  where numberlist0 i (h:rest) = (i, h):(numberlist0 (i+1) rest)
+  where numberlist0 i (h:rest) = (i, h):numberlist0 (i+1) rest
         numberlist0 _ []       = []
 
 swimlanes :: LabeledTrace -> [Swimlane] -- left to right
@@ -556,15 +556,15 @@ swimlanes labeledtrace = Prelude.map
                            (alllanes labeledtrace)
     where alllanes :: LabeledTrace -> [String]
           alllanes labeledtrace =
-            List.nub (Prelude.map (\(_, (EventGrp sl _)) -> sl) labeledtrace)
+            List.nub (Prelude.map (\(_, EventGrp sl _) -> sl) labeledtrace)
           filterandshape :: LabeledTrace -> String -> Swimlane
           filterandshape trace slname =
             let lt = Prelude.filter
-                       (\(_, (EventGrp sl _)) -> sl == slname)
+                       (\(_, EventGrp sl _) -> sl == slname)
                        trace
              in (slname, lt)
 
-to_pstricks_swimlanes :: (Maybe StateAnnFun) -> Int ->
+to_pstricks_swimlanes :: Maybe StateAnnFun -> Int ->
                          Abbrev -> Int -> Bool -> Int -> StateNotes ->
                          StateNotes -> [Int] -> [Swimlane] -> [String]
 to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
@@ -576,7 +576,7 @@ to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
                                                 allstateidx)
                   sl)
     where to_pstricks_swimlanes0 ::
-            (Maybe StateAnnFun) -> Int ->
+            Maybe StateAnnFun -> Int ->
             Abbrev -> Bool -> Int -> StateNotes -> StateNotes ->
             [String] -> [Int] -> Swimlane -> [String]
           to_pstricks_swimlanes0
@@ -616,32 +616,32 @@ to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
                                                     "[dotstyle=triangle*,"++
                                                     "dotscale=2,dotangle=0]")
                                                else (False, "")
-                                  l = ["\\rput [tr]("++(show xpos)++",",
-                                      (show ypos)++"){",
-                                      "\\rnode{dummy_"++(show i)++"}",
-                                      "{\\"++(footnotesize "footnotesize")++
+                                  l = ["\\rput [tr]("++show xpos++",",
+                                      show ypos++"){",
+                                      "\\rnode{dummy_"++show i++"}",
+                                      "{\\"++footnotesize "footnotesize"++
                                       " \\hspace{0pt}",
-                                      (show i)++" \\hspace{1pt} }} ",
+                                      show i++" \\hspace{1pt} }} ",
                                       if customstyle
                                          then "\\dotnode"++dotstyle++"("++
-                                                  (show xpos)++","++
-                                                  (show ypos)++"){"++
-                                                  (ref i sli)++"}"
-                                         else "\\dotnode ("++(show xpos)++","++
-                                              (show ypos)++"){"++
-                                              (ref i sli)++"}"
+                                                  show xpos++","++
+                                                  show ypos++"){"++
+                                                  ref i sli++"}"
+                                         else "\\dotnode ("++show xpos++","++
+                                              show ypos++"){"++
+                                              ref i sli++"}"
                                       ]
                                   n = ["\\rput [l]("++ -- use lb for bottom
-                                      (show numlanes)++",",
-                                      (show ypos)++"){",
-                                      "\\rnode{descr_"++(show i)++"}",
+                                      show numlanes++",",
+                                      show ypos++"){",
+                                      "\\rnode{descr_"++show i++"}",
                                       "{"++(parboxState size $
-                                              (show i)++": "++note)++
+                                              show i++": "++note)++
                                       "}}"++"\\ncline[linestyle=dotted, ",
                                       "linecolor=lightgray]{"++"-}",
-                                      "{"++(ref i sli)++"}{descr_"++
-                                           (show i)++"}"]
-                                  c = if (index == m-1) -- if,then draw box
+                                      "{"++ref i sli++"}{descr_"++
+                                           show i++"}"]
+                                  c = if index == m-1 -- if,then draw box
                                       then let n = cycle
                                                d = (0.5 :: Double)
                                                xboxl = -d
@@ -668,8 +668,8 @@ to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
                           ievents
                 symnodes = Prelude.map (\(i, _egrp) -> i) ievents
                 labels = label xpos (fromIntegral m-0.5 :: Double) name
-             in nodes++(pairs vertnotes name symnodes)++labels
-          stateAnnHor :: (Maybe StateAnnFun) -> Expr
+             in nodes++pairs vertnotes name symnodes++labels
+          stateAnnHor :: Maybe StateAnnFun -> Expr
                       -> (Bool, String, String) -- has-label, label, font
           stateAnnHor Nothing _ = (False, "", "")
           stateAnnHor (Just saf) state =
@@ -694,27 +694,27 @@ to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
           pairs vertnotes sli (i:is) =
               let j = head is
                   l = "\\ncline[linewidth=3pt,"++"linecolor=lightgray]{"++
-                      "-}{"++(ref i sli)++"}{"++(ref j sli)++"}"
+                      "-}{"++ref i sli++"}{"++ref j sli++"}"
                   note = case Map.lookup i vertnotes of
                            Nothing -> ""
                            Just t  -> t
                   t = "\\aput[1pt]{:U}{\\"++defaultnotefont config++" "++
                       note++"}"
                in case Map.lookup i vertnotes of
-                    Nothing -> l:(pairs vertnotes sli is)
-                    Just _  -> (l++t):(pairs vertnotes sli is)
+                    Nothing -> l : pairs vertnotes sli is
+                    Just _  -> (l++t) : pairs vertnotes sli is
           -- NOTE: needed when -Dcompact yields no msg exchanges (e.g. if
           -- patterns in sla file are not yet written)
           pairs _vertnotes _sli [] = []
-          label xpos ypos name = ["\\rput[b]("++(show xpos)++","++(show ypos)++
-                                 "){\\rnode{swimlane_"++(name)++
-                                 "}{\\psframebox{\\"++(footnotesize "footnotesize")++" "++name++"}}}"]
+          label xpos ypos name = ["\\rput[b]("++show xpos++","++show ypos++
+                                 "){\\rnode{swimlane_"++name++
+                                 "}{\\psframebox{\\"++footnotesize "footnotesize"++" "++name++"}}}"]
           parboxState :: String -> String -> String
           parboxState size s = "\\parbox[t]{"++(show $ r_label_w_mm config)++
                                "mm}{\\"++size++" "++s++"}"
           getRec :: EventGrp -> Expr
           getRec (EventGrp _ eset) =
-              let [(NoMessageEvent map _)] = Set.toList eset -- FIXME rename Ty
+              let [NoMessageEvent map _] = Set.toList eset -- FIXME rename Ty
                in RecE map
           defaultNote :: Abbrev -> String -> EventGrp -> (Bool, String, String)
           defaultNote _abbrev f (EventGrp _ eset) =
@@ -722,7 +722,7 @@ to_pstricks_swimlanes saf cycle abbrev numlanes defaultNotes m notes vertnotes
                            (\e acc ->
                              case Map.lookup (Ident f) (erec e) of
                                Nothing -> acc
-                               Just (StrE s) -> (protectS s):acc
+                               Just (StrE s) -> protectS s : acc
                                _ -> error "unspecified")
                            [] eset
                in case msgs of
@@ -751,8 +751,8 @@ type PlayerGrid = Map Int (Set String)
 playerGrid :: [ColoredMessageExchange] -> PlayerGrid
 playerGrid l =
   let l' = List.map (\(me, _) ->
-             let ((i,  (NoMessageEvent _ sl)),
-                  (i', (NoMessageEvent _ sl')), _) = me
+             let ((i,  NoMessageEvent _ sl),
+                  (i', NoMessageEvent _ sl'), _) = me
               in [(i,  Set.fromList [sl ]),     -- i' because 'next' state
                   (i', Set.fromList [sl'])]) l  -- is used to label transit.
    in Map.fromListWith (\a b -> Set.union a b) $ concat l'
@@ -780,36 +780,36 @@ to_pstricks_interactions _defaultNotes numy arrowtips
                                           show allstateidx) 0
                   ypos = numy-(index+1)
                   -- ypos = numy-j
-                  StrE _typename = m!(Ident "type")
+                  StrE _typename = m ! Ident "type"
                   (hasTipLabel, tiplabel, tipSize) =
                       (tiplabel2 /= "", tiplabel2, footnotesize tiplabelfont)
                   success = case Map.member (Ident "success") m of
-                              True  -> let AtomE boo = m!(Ident "success")
-                                        in " "++(shortform boo abbrev)
+                              True  -> let AtomE boo = m ! Ident "success"
+                                        in " "++ shortform boo abbrev
                               False -> ""
                   tip = if hasTipLabel
                           then "\\"++tipSize++" "++tiplabel++success
                           else ""
-                  l = "\\ncarc[linestyle="++(style)++", linecolor="++(color)++
-                       "]{"++"->}{"++(ref i sli)++"}{"++
-                                     (ref j slj)++"}"++
-                        "\\bput[.5pt](.8){ \\rnode{"++(label_msg "m" i j)++
+                  l = "\\ncarc[linestyle="++style++", linecolor="++color++
+                       "]{"++"->}{"++ref i sli++"}{"++
+                                     ref j slj++"}"++
+                        "\\bput[.5pt](.8){ \\rnode{"++label_msg "m" i j++
                         "}{"++tip++"}}"
                   (hasnote, note, size) =
                       (label /= "", label, footnotesize labelfont)
-                  t = "\\pnode(-1,"++(show ypos)++"){"++
-                       (label_msg "c" i j)++"}"++
-                       "\\rput[rt](-1,"++(show ypos)++
-                       "){\\Rnode{"++(label_msg "dummy" i j)++
+                  t = "\\pnode(-1,"++show ypos++"){"++
+                       label_msg "c" i j++"}"++
+                       "\\rput[rt](-1,"++show ypos++
+                       "){\\Rnode{"++label_msg "dummy" i j++
                        "}{"++(parboxMsg size $
-                                (show i)++"-"++(show j)++": "++note++"}}")++
+                                show i++"-"++show j++": "++note++"}}")++
                        "\\ncline[linestyle=dotted,dotsize=1.5pt 1, "++
                        "linecolor=lightgray]{"++"-*}{"++
-                       (label_msg "c" i j)++"}{"++(label_msg "m" i j)++"}"
+                       label_msg "c" i j++"}{"++label_msg "m" i j++"}"
                in case hasnote of
                     True  -> l++t
                     False -> l
-            where label_msg l i j = l++"_"++(show i)++"_"++(show j)
+            where label_msg l i j = l++"_"++show i++"_"++show j
                   parboxMsg :: String -> String -> String
                   parboxMsg size s =
                       "\\parbox[t]{"++(show $ l_label_w_mm config)++"mm}"++
@@ -830,12 +830,12 @@ footnotesize s = case usernotefont config of
 to_pstricks_graph_open :: Int -> Int -> Bool -> Bool -> String -> [String]
 to_pstricks_graph_open n m mnotes snotes issue =
     let hasLeftComment = mnotes || gen_msg_labels config
-        hasRightComment = snotes || (gen_state_labels config)
+        hasRightComment = snotes || gen_state_labels config
         right_comment_width = case hasRightComment of
-                                True -> (xunit_mm config + r_label_w_mm config)
+                                True -> xunit_mm config + r_label_w_mm config
                                 False -> 2
         left_comment_width = case hasLeftComment of
-                                True -> (xunit_mm config + l_label_w_mm config)
+                                True -> xunit_mm config + l_label_w_mm config
                                 False -> 2 -- fluff
         xorigin = -left_comment_width
         yorigin :: Double
@@ -854,8 +854,8 @@ to_pstricks_graph_open n m mnotes snotes issue =
              if fbox config then "\\fbox{" else ""]
      in (if includefile config then [] else h) ++
          ["\\begin{pspicture}"++
-         "("++(show xorigin)++"mm, "++(show yorigin)++"mm)",
-         "("++(show xupper)++"mm, "++(show yupper)++"mm)",
+         "("++show xorigin++"mm, "++show yorigin++"mm)",
+         "("++show xupper++"mm, "++show yupper++"mm)",
          ""]
 
 to_pstricks_graph_preamble :: Int -> Int -> [String]
@@ -969,7 +969,7 @@ textToStates fc =
                                         _ -> error "unspecified")
                                       [] ls
                             vars = List.map (\l -> case l of
-                                                     [('/':'\\':' ':v), _e] ->
+                                                     ['/':'\\':' ':v, _e] ->
                                                        v
                                                      _ -> error "unspecified")
                                             ls
@@ -1015,13 +1015,13 @@ textToStates fc =
 
 -- FIXME which of these many function are really used (the TLA+ one),
 -- remove all others
-toSwimlanes :: [State] -> (Maybe StateAnnFun) -> PlayerGrid -> [String] -> [Swimlane]
+toSwimlanes :: [State] -> Maybe StateAnnFun -> PlayerGrid -> [String] -> [Swimlane]
 toSwimlanes states saf grid playernames =
     let scl = List.map (\(s, s') -> (s, s', diffSL s s')) $
                 zip states (tail states)
      in groupSL $ concat (List.map (convert (length states) saf
                                             grid playernames) scl)
-    where convert :: Int -> (Maybe StateAnnFun) ->
+    where convert :: Int -> Maybe StateAnnFun ->
                      PlayerGrid -> [String] -> (State, State, StateChange)
                   -> [Swimlane]
           convert _n saf grid playernames (s, s', sc) =
@@ -1076,7 +1076,7 @@ toSwimlanes states saf grid playernames =
           diffdescr :: StateChange -> [DiffDescr]
           diffdescr (_i, sc) =
              concat $ List.map (\(_id, dg) -> dg) sc
-          stateAnn :: (Maybe StateAnnFun) -> Expr -> (String, [String])
+          stateAnn :: Maybe StateAnnFun -> Expr -> (String, [String])
           stateAnn Nothing _ = ("", []) -- don't care
           stateAnn (Just saf) rec =
               case saf rec of

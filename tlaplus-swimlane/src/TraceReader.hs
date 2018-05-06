@@ -89,7 +89,7 @@ diffE p (RecE m) (RecE m') = diffRec p m m'
 diffE p (MapE m) (MapE m') = diffMap p m m'
 diffE p (SetE s) (SetE s') = diffSet p s s'
 diffE p (SeqE s) (SeqE s') = diffSeq p s s'
-diffE p e1 e2 | (getS e1) == (getS e2) = []
+diffE p e1 e2 | getS e1 == getS e2 = []
               | otherwise = [DChg p e1 e2]
   where getS :: Expr -> String
         getS (IntE  i) = show i
@@ -177,11 +177,11 @@ ppDL :: [DiffDescr] -> [String]
 ppDL = map ppD
 
 ppD :: DiffDescr -> String
-ppD (DChg p e e')  = (printPath p)++" $\\mapsto$ "++(ppE e  Map.empty)++
+ppD (DChg p e e')  = printPath p++" $\\mapsto$ "++ppE e  Map.empty++
                                     " / " ++(color "blue" $ ppE e' Map.empty)
-ppD (DAdd q p e )  = (printPath p)++" $\\mapsto$ +"++printQ q++" "++
+ppD (DAdd q p e )  = printPath p++" $\\mapsto$ +"++printQ q++" "++
                      color "green" (ppE e Map.empty)
-ppD (DRem q p e )  = (printPath p)++" $\\mapsto$ -"++printQ q++" "++
+ppD (DRem q p e )  = printPath p++" $\\mapsto$ -"++printQ q++" "++
                      color "red" (ppE e Map.empty)
 
 printQ Nothing = ""

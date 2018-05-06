@@ -21,7 +21,7 @@ mkState = PState
             }
 
 pushIndent :: PState -> Int -> PState
-pushIndent st i = st { indent = i:(indent st) }
+pushIndent st i = st { indent = i:indent st }
 
 popIndent :: PState -> (Int, PState)
 popIndent st = let l = indent st

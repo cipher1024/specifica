@@ -60,7 +60,7 @@ augmentNonExplicitMsgHandlers spec =  everywhere (mkT (f spec)) spec
               [SH_GuardedInstrList upos Nothing Nothing
                  [SH_I_FailTLAClause upos ]] -- do nothing, AND don't drop msg!
           hasAny :: [SH_RoleElement] -> Bool
-          hasAny l = [] /= (everything (++) ([] `mkQ` f)) l
+          hasAny l = [] /= everything (++) ([] `mkQ` f) l
               where f a@(SH_MsgHandler _ _ r _ _ _ True Nothing _) = [True]
                     f _ = []
           singularHandlerMsgs :: [SH_RoleElement] -> [String]
@@ -69,7 +69,7 @@ augmentNonExplicitMsgHandlers spec =  everywhere (mkT (f spec)) spec
                     f _ = []
           allMTypesToRole :: SH_FL_Spec -> String -> [String]
           allMTypesToRole spec role =
-              (everything (++) ([] `mkQ` (f role))) spec
+              everything (++) ([] `mkQ` f role) spec
               where f role (SH_MsgDecl _ _ to mtype _)
                           -- note: to can only be UserDefType of Set<UDef>
                           -- so assuming that the kernel is a single string is
@@ -121,7 +121,7 @@ rewriteAnyHandlerGuard spec = everywhere (mkT f) spec
                 -- "otherwise" which TLACodeGen cannot handle right now
                 -- (assumes the "otherwise" is the last branch, otherwise
                 -- it doesn't rewrite it)
-                ginstr' = negLeg ++ (addGuards [when] ginstr)
+                ginstr' = negLeg ++ addGuards [when] ginstr
              in SH_MsgHandler upos ann role Nothing {- clear guard, moved inside -}
                   mbind glblHooks True Nothing ginstr'
           f x = x
@@ -205,7 +205,7 @@ rewriteANY spec = everywhere (mkT (f spec)) spec
 
 -- As long as we only support a single ANY msg handler per role, we can just
 dominatedMsgTypes :: SH_FL_Spec -> String -> [String]
-dominatedMsgTypes spec role = (everything (++) ([] `mkQ` (f role))) spec
+dominatedMsgTypes spec role = everything (++) ([] `mkQ` f role) spec
   where f role (SH_MsgHandler _ _ r _ mtype _ False Nothing _) -- no ANY, no FROM
           | r == role = [mtype]
           | otherwise = []
@@ -213,7 +213,7 @@ dominatedMsgTypes spec role = (everything (++) ([] `mkQ` (f role))) spec
 
 dominatingHandler :: SH_FL_Spec -> String -> [SH_RoleElement]
 dominatingHandler spec role =
-    (everything (++) ([] `mkQ` (f role))) spec
+    everything (++) ([] `mkQ` f role) spec
   where f role
           a@(SH_MsgHandler _ _ r _ _ _ True Nothing _)
               | r == role = [a] -- non-ANY handler, no FROM, inside same role
@@ -223,11 +223,11 @@ dominatingHandler spec role =
 -- FIXME kramer@acm.org reto -- what if glblHooks isn't Nothing?
 mkExtend :: SH_FL_Spec -> SH_RoleElement -> SH_RoleElement
 mkExtend spec (SH_MsgHandler i ann role when mtype glblHooks a from ginstr) =
-    let mtypeGuard = (AS_InfixOP epos AS_EQ
+    let mtypeGuard = AS_InfixOP epos AS_EQ
                       (AS_InfixOP epos AS_DOT
                        (mk_AS_Ident mtype)
                        (mk_AS_Ident "type"))
-                      (mk_AS_Ident $ show mtype))
+                      (mk_AS_Ident $ show mtype)
         guards = [Just $ SH_ExprWrapper upos mtypeGuard,
                   when]
         ginstr' = addGuards guards ginstr
@@ -239,7 +239,7 @@ mkExtend spec (SH_MsgHandler i ann role when mtype glblHooks a from ginstr) =
 
 mkHookName s = "any_hook_" ++ s
 
-addGuards :: [(Maybe SH_ExprWrapper)] -> [SH_GuardedInstrList]
+addGuards :: [Maybe SH_ExprWrapper] -> [SH_GuardedInstrList]
           -> [SH_GuardedInstrList]
 addGuards guards l = map f l
   where f gil@(SH_GuardedInstrList _ g hooks instrs) =
@@ -250,7 +250,7 @@ addGuards guards l = map f l
                   SH_GuardedInstrList upos (combineGuards (guards ++ [g]))
                                       hooks instrs
 
-combineGuards :: [Maybe SH_ExprWrapper] -> (Maybe SH_ExprWrapper)
+combineGuards :: [Maybe SH_ExprWrapper] -> Maybe SH_ExprWrapper
 combineGuards l = let gs = dropNothing l
                    in if gs == []
                       then Nothing

@@ -41,7 +41,7 @@ tlaspec = do { whiteSpace
 
 dashSep :: TLAParser AS_UnitDef
 dashSep = do{ p <- getPosition
-            ; skipMany1 $ ((char '-') <?> "separator (----)")
+            ; skipMany1 $ (char '-' <?> "separator (----)")
             ; whiteSpace
             ; return $ AS_Separator p
             }
@@ -544,10 +544,10 @@ braceExpr = braces $ choice [
 
 gtgtExpr :: TLAParser AS_Expression -- left factor << ...
 gtgtExpr = try $ do{ p <- getPosition
-                   ; (between (symbol "<<") (symbol ">>") $
+                   ; between (symbol "<<") (symbol ">>") $
                         do{ l <- commaSep expression
                           ; return $ AS_Tuple (mkInfo p) l
-                          })
+                          }
                    }
 
 letExpr :: TLAParser AS_Expression

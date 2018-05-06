@@ -1,6 +1,6 @@
 module GenSLA(genSLAFile) where
 
-import Data.List(nub, isPrefixOf)
+import Data.List (nub, isPrefixOf, (\\))
 
 import Flatten
 import Data.Generics
@@ -8,8 +8,6 @@ import Syntax
 import RewriteTimer(allRoles)
 import TLACodeGen(typeKernel, subst, Pattern)
 import ParserHelper(inlineOperatorDef)
-
-import Data.List((\\))
 
 import Text.ParserCombinators.Parsec.Pos as PPos
 
@@ -154,7 +152,7 @@ genSLAFile pname spec tla =
 \ ====\n"
       ce = extractColorAnn spec
       se = extractStyleAnn spec
-      s2' = " " ++ (prettyPrintUnit (rewriteAnn ce se (inlineOperatorDef s2)))
+      s2' = " " ++ prettyPrintUnit (rewriteAnn ce se (inlineOperatorDef s2))
       s = s1 ++ s2' ++ "\n\n" ++ s3
   in writeFile (pname ++ ".sla") s
 
@@ -212,7 +210,7 @@ rewriteAnn _ _ x = x
 extractColorAnn spec =
   let allMsgAnn = filter isMsgAnn $ extractAllDisplaySLs spec
       allColor = concat $ map colorEntry allMsgAnn
-      arms = map (\(mtype, (SH_ExprWrapper _ e)) ->
+      arms = map (\(mtype, SH_ExprWrapper _ e) ->
                      AS_CaseArm epos
                        (AS_InfixOP epos AS_EQ
                         (AS_InfixOP epos AS_DOT
@@ -233,7 +231,7 @@ extractColorAnn spec =
 extractStyleAnn spec =
   let allMsgAnn = filter isMsgAnn $ extractAllDisplaySLs spec
       allStyle = concat $ map colorEntry allMsgAnn
-      arms = map (\(mtype, (SH_ExprWrapper _ e)) ->
+      arms = map (\(mtype, SH_ExprWrapper _ e) ->
                      AS_CaseArm epos
                        (AS_InfixOP epos AS_EQ
                         (AS_InfixOP epos AS_DOT
@@ -253,7 +251,7 @@ extractStyleAnn spec =
 isMsgAnn (SH_SL_MsgAnn _ _) = True
 
 extractAllDisplaySLs :: SH_FL_Spec -> [SH_SL_Ann]
-extractAllDisplaySLs spec = (everything (++) ([] `mkQ` f)) spec
+extractAllDisplaySLs spec = everything (++) ([] `mkQ` f) spec
   where f (SH_DisplaySwimlane _ l) = l
         f _ = []
 

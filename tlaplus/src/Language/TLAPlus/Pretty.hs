@@ -56,7 +56,7 @@ ppE (AS_OpApp _info e l) =
     let args = if l == []
                then empty
                else parens( align( cat $ punctuate comma (map (group . ppE) l)))
-     in group (ppE e <//> group(args))
+     in group (ppE e <//> group args)
 ppE (AS_FunctionType _info a b) = brackets $ ppE a </> text "->" </> ppE b
 -- hack to make sure that SUBSET (A \X B) is printed with the () in place,
 -- otherwise TLC will complain about ambigious precedence. Note that \X isn't
@@ -68,7 +68,7 @@ ppE p@(AS_InfixOP _loc op a b) =
       then group( protectE p a <//> ppInfixOP op <//> protectE p b )
       else group( protectE p a <+> ppInfixOP op <+> protectE p b )
     where tightop = [AS_DOT, AS_DOTDOT, AS_Plus, AS_Minus, AS_FunApp]
-ppE (AS_Let _info l e) = align((text "LET" <+> (align (ppUnitList l)))
+ppE (AS_Let _info l e) = align((text "LET" <+> align (ppUnitList l))
                                <$> group (text " IN" <+> align (ppE e)))
 ppE (AS_IF _info cond a b) =
     align(    text "IF" <+> align (ppE cond)
@@ -103,10 +103,10 @@ ppE (AS_Tuple _info l) =
 -- The alternative (prefered) would be to always force the LOR and LAND onto
 -- mutliple lines
 ppE (AS_LAND _pos le) =
-    let lt = map (\e -> group $ (text "/\\") <+> (parens $ ppE e)) le
+    let lt = map (\e -> group $ text "/\\" <+> (parens $ ppE e)) le
      in group( align $ vsep lt )
 ppE (AS_LOR _pos le) =
-    let lt = map (\e -> group $ (text "\\/") <+> (parens $ ppE e)) le
+    let lt = map (\e -> group $ text "\\/" <+> (parens $ ppE e)) le
      in group( align $ vsep lt )
 ppE (AS_Num _info n) = int n
 ppE (AS_Bool _info b) = text $ if b then "TRUE" else "FALSE"
@@ -133,9 +133,9 @@ ppE (AS_Except e l) =
                                <+>  align (ppE e)))
             l
         b = group $ vcat (punctuate comma a)
-     in group( brackets (align( group( (group (ppE e)
-                                 <+> text "EXCEPT" <+> group (align b))))))
-ppE (AS_OldVal) = text "@"
+     in group( brackets (align( group (group (ppE e)
+                                 <+> text "EXCEPT" <+> group (align b)))))
+ppE AS_OldVal = text "@"
 ppE (AS_Stutter a b) = (brackets $ ppE a) <//> text "_" <//> ppE b
 ppE (AS_Fair strong a b) =
          (if strong then text "SF" else text "WF")
@@ -152,7 +152,7 @@ ppE (AS_Case _ arms other) = -- FIXME missing the pretty print of []
 ppE (AS_BIF mod name) = text "<builtin" <+>
                         text mod <//> text "!" <//>
                         text name <//> text ">"
-ppE (AS_CloseFunApp) = text "]"
+ppE AS_CloseFunApp = text "]"
 -- missing pretty printer support, debug aid
 -- ppE e = text $ "(<?>" ++ (show e) ++ "<?>)"
 

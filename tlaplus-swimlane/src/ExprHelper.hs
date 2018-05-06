@@ -17,19 +17,19 @@ join sep l    = let rl = reverse l
 type Abbrev = Map String String
 ppE :: Expr -> Abbrev -> String
 ppE (RecE map) a = let l = Map.foldrWithKey
-                            (\k e acc -> ((ppI k a)++"="++(ppE e a)):acc)
+                            (\k e acc -> (ppI k a++"="++ppE e a):acc)
                             [] map
-                    in "["++(join ", " l)++"]"
+                    in "["++join ", " l++"]"
 ppE (MapE map) a = let l = Map.foldrWithKey
-                            (\k e acc -> ((ppE k a)++"="++(ppE e a)):acc)
+                            (\k e acc -> (ppE k a++"="++ppE e a):acc)
                             [] map
-                    in "["++(join ", " l)++"]"
-ppE (SetE se) a = let l = Set.fold (\e acc -> (ppE e a):acc) [] se
-                   in "\\{"++(join ", " l)++"\\}"
-ppE (SeqE le) a = let l = List.foldl (\acc e -> (ppE e a):acc) [] le
-                   in "$\\ll$"++(join ", " l)++"$\\gg$"
+                    in "["++join ", " l++"]"
+ppE (SetE se) a = let l = Set.fold (\e acc -> ppE e a:acc) [] se
+                   in "\\{"++join ", " l++"\\}"
+ppE (SeqE le) a = let l = List.foldl (\acc e -> ppE e a:acc) [] le
+                   in "$\\ll$"++join ", " l++"$\\gg$"
 ppE (IntE i)  a = shortform (show i) a
-ppE (StrE s)  a = "{\\tt \"" ++ (shortform s a) ++ "\"}"
+ppE (StrE s)  a = "{\\tt \"" ++ shortform s a ++ "\"}"
 ppE (AtomE s) a = shortform s a
 
 ppI :: Ident -> Abbrev -> String

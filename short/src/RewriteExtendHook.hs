@@ -7,7 +7,6 @@ import Flatten
 import Data.List(groupBy, nub)
 import Debug.Trace(trace)
 import RewriteCont(beautifyLAND)
-import Flatten(prettyPrintFlatSH)
 
 import Text.ParserCombinators.Parsec.Pos(newPos, SourcePos(..))
 import Language.TLAPlus.Syntax as TLASyntax
@@ -84,7 +83,7 @@ mergeExtendHook spec = fixP mergeExtendHook0 spec
                        then arg
                        else fixP f (f arg)
 
-spliceHooks :: SH_FL_Spec -> (Maybe [SH_HookCaller]) -> [SH_GuardedInstrList]
+spliceHooks :: SH_FL_Spec -> Maybe [SH_HookCaller] -> [SH_GuardedInstrList]
             -> [SH_GuardedInstrList]
 spliceHooks spec (Just glblHooks) l =
     let blocks = map (findAndSubstBindings spec) glblHooks
@@ -95,11 +94,11 @@ spliceHooks spec Nothing l = -- no global hook, there may be per branch hooks!
 -- FIXME kramer@acm.org reto -- we should only find the hooks in the same role.
 findAndSubstBindings :: SH_FL_Spec -> SH_HookCaller -> [SH_GuardedInstrList]
 findAndSubstBindings spec (SH_HookCaller _ label argList) =
-    (everything (++) ([] `mkQ` (f label argList))) spec
+    everything (++) ([] `mkQ` f label argList) spec
   where f label argList
           (SH_Extend_Hook _ _ [SH_HookCallee _ calleeLabel calleeArgList] l) =
             if (label == calleeLabel) &&
-                   ((length argList) == (length calleeArgList))
+                   (length argList == length calleeArgList)
             then substGIL (zip calleeArgList argList) l
             else []
         f _ _ _ = []
@@ -195,7 +194,7 @@ combineEXT_HOOK :: [[SH_RoleElement]] -> [SH_RoleElement]
 combineEXT_HOOK l = concat $ map comb l
   where comb :: [SH_RoleElement] -> [SH_RoleElement]
         comb [] = []
-        comb l@((SH_Extend_Hook _ r [SH_HookCallee _ name args] _):_) =
+        comb l@(SH_Extend_Hook _ r [SH_HookCallee _ name args] _ : _) =
             let il  = mergeIL $ concatMap mkIL l
                 il' = remDupHACK il
                 args' = map mkArg [1..length args]
@@ -219,7 +218,7 @@ mergeIL l =
                   (SH_GuardedInstrList _ gb _ _) = ga == gb
         combGIL :: [SH_GuardedInstrList] -> [SH_GuardedInstrList]
         combGIL [] = []
-        combGIL l@((SH_GuardedInstrList _ g _ _):_) =
+        combGIL l@(SH_GuardedInstrList _ g _ _ : _) =
             let h' = let l' = concatMapMaybes getHook l
                       in if l' == [] then Nothing else Just l'
                 l' = concatMap getIL l
@@ -244,7 +243,7 @@ mergeIL l =
 -}
 hackDeDup :: SH_FL_Spec -> SH_FL_Spec
 hackDeDup spec = everywhere (mkT f) spec
-    where f l@((SH_GuardedInstrList _ _ _ _):_) = remDupHACK l
+    where f l@(SH_GuardedInstrList _ _ _ _ : _) = remDupHACK l
           f x = x
 
 remDupHACK :: [SH_GuardedInstrList] ->  [SH_GuardedInstrList]

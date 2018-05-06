@@ -62,7 +62,7 @@ rewriteTimerBoilerplate timeline_init spec =
         c = SH_VerbTLAOp upos dummyI Nothing genRoleNext
      in spec { roleDecl = if hasGlobalRole spec -- create global role if it
                           then roleDecl spec    -- does not already exist
-                          else g : (roleDecl spec),
+                          else g : roleDecl spec,
                -- b1,2 are NOW related - may want those in user defined
                -- PROPERTIES, hence they need to come before the user def
                -- ones.
@@ -117,7 +117,7 @@ rewriteTimer0 = everywhere (mkT f)
                 (appendInstr role Nothing ginstr)
           f (SH_TimeoutHandler _ role when name hook ginstr) =
               SH_CallHandler upos -- NOTE timeout turns into a call handler
-                role (conj when (enable(name))) (timeout name) [] hook
+                role (conj when (enable name)) (timeout name) [] hook
                 (appendInstr role (Just name) ginstr)
           f (SH_CrashHandler _ ann role when remoteRole id hook ginstr) =
               SH_CrashHandler upos ann role when remoteRole id hook
@@ -130,13 +130,13 @@ rewriteTimer0 = everywhere (mkT f)
                 (appendInstr role Nothing ginstr)
           f x = x
 
-conj :: (Maybe SH_ExprWrapper) -> String -> (Maybe SH_ExprWrapper)
+conj :: Maybe SH_ExprWrapper -> String -> Maybe SH_ExprWrapper
 conj Nothing e =
     Just (SH_ExprWrapper upos (mk_AS_Ident e))
 conj (Just (SH_ExprWrapper _ a)) e =
     Just (SH_ExprWrapper upos (AS_LAND epos [a, mk_AS_Ident e]))
 
-updateSched :: String -> (Maybe String) -> [(AS_Expression, String)]
+updateSched :: String -> Maybe String -> [(AS_Expression, String)]
             -> [String] -> SH_Instr
 updateSched role name restarted canceled =
     let b = AS_OpApp epos
@@ -185,19 +185,19 @@ canceledT l = concat $ map canceledT0 l
 -- remove by turning it into a call handler), we are forced to explude the
 -- global tick handler from the rewrites done to call handlers in all other
 -- roles.
-appendInstr :: String -> (Maybe String) -> [SH_GuardedInstrList]
+appendInstr :: String -> Maybe String -> [SH_GuardedInstrList]
             -> [SH_GuardedInstrList]
 appendInstr "global" _ l = l
 appendInstr role name l = map (appendInstr0 role name) l
-appendInstr0 :: String -> (Maybe String) -> SH_GuardedInstrList
+appendInstr0 :: String -> Maybe String -> SH_GuardedInstrList
              -> SH_GuardedInstrList
 appendInstr0 role name ginstr =
     let SH_GuardedInstrList info guard label l = ginstr
         instr = let r = restartedT l
                     -- NOTE: TIMERRESTART will implicitly CANCEL any already
                     -- scheduled timer of the same name (++ map , below)
-                    c = (canceledT l) ++ -- by way of a CANCEL instruction
-                        (map (\(_,n) -> n) r) -- extract timername for cancel
+                    c = canceledT l ++ -- by way of a CANCEL instruction
+                        map (\(_,n) -> n) r -- extract timername for cancel
                  in if (name == Nothing) && (r == []) && (c == [])
                     then []
                     else let Just n = name
@@ -225,7 +225,7 @@ rewriteEvery spec = everywhere (mkT f) spec
                                        (SH_Every _ _ _ _ _ _) -> True
                                        _ -> False) l
           -- No guard case
-          replEvery (rname) (SH_Every _ role Nothing period hook ginstr) =
+          replEvery rname (SH_Every _ role Nothing period hook ginstr) =
               let i = SH_I_Timerrestart upos period (every period)
                in [SH_TimeoutHandler upos (lower rname) Nothing
                       (every period) hook (appendInstrRaw i ginstr)]
@@ -235,7 +235,7 @@ rewriteEvery spec = everywhere (mkT f) spec
           -- rescheduled. If the every statement is guarded, we thus create
           -- two handlers to cover the regular and the case where the guard
           -- is false to disable (i.e. not restart) the timer.
-          replEvery (rname) (SH_Every _ role guard period hook ginstr) =
+          replEvery rname (SH_Every _ role guard period hook ginstr) =
               let i = SH_I_Timerrestart upos period (every period)
                   j = SH_I_Timercancel upos (every period)
                in [SH_TimeoutHandler upos (lower rname) guard -- regular guard
@@ -256,7 +256,7 @@ rewriteLinearStutter spec =
       then let g = SH_RoleDef upos "GLOBAL" [] []
                spec' = if hasGlobalRole spec
                          then spec
-                         else spec { roleDecl = g : (roleDecl spec) }
+                         else spec { roleDecl = g : roleDecl spec }
             in everywhere (mkT f) spec'
       else spec
   where f (SH_RoleDef _ "GLOBAL" vars l) =
@@ -289,7 +289,7 @@ appendInstrRaw0 instr ginstr =
      in SH_GuardedInstrList info guard label (l ++ [instr])
 
 allTimers :: SH_FL_Spec -> String -> [String]
-allTimers spec role = (everything (++) ([] `mkQ` (f role))) spec
+allTimers spec role = everything (++) ([] `mkQ` f role) spec
   where f role t@(SH_Timer _ r name) | r == role = [name]
         f _ _ = []
 
@@ -315,7 +315,7 @@ genTimelineInit spec =
 
 allEveryPeriodsForRole :: SH_FL_Spec -> String -> [SH_ExprWrapper]
 allEveryPeriodsForRole spec rname =
-  let [role] = everything (++) ([] `mkQ` (f rname)) spec
+  let [role] = everything (++) ([] `mkQ` f rname) spec
       everyL = everything (++) ([] `mkQ` g) role
       periods = map (\(SH_Every _ _ _ period _ _) -> period) everyL
    in periods
@@ -341,38 +341,38 @@ every (SH_ExprWrapper _ (AS_Num _ i)) = "every_" ++ show i
 -- or it can be defined as TLA { MaxTime = x * SomeTimerPeriod }
 genTimeType =
     inlineOperatorDef $ unlines
-      (["Time == 0 .. MaxTime"])
+      ["Time == 0 .. MaxTime"]
 
 genNow =
     inlineOperatorDef $ unlines
-      (["Now(timeline) ==",
+      [ "Now(timeline) ==",
         "  IF timeline = {}",
         "    THEN 0",
         "    ELSE LET times == { x[1] : x \\in timeline}",
-        "          IN CHOOSE t \\in times: \\A tt \\in times: t <= tt"])
+        "          IN CHOOSE t \\in times: \\A tt \\in times: t <= tt"]
 
 -- FIXME kramer@acm.org reto -- hardcoded st_GLOBAL reference
 genNowOp =
     inlineOperatorDef $ unlines
-      (["NOW == Now(st_GLOBAL.g_timeline)"])
+      ["NOW == Now(st_GLOBAL.g_timeline)"]
 
 genTimeMax =
     inlineOperatorDef $ unlines
-      (["Min2(a,b) == IF a < b THEN a ELSE b"])
+      ["Min2(a,b) == IF a < b THEN a ELSE b"]
 
 genLinearTimeMaxd =
     inlineOperatorDef $ unlines
-      (["LinearTimeMaxd(timeline) ==",
+      [ "LinearTimeMaxd(timeline) ==",
         "  IF timeline = {}",
         "    THEN FALSE",
-        "    ELSE \\E x \\in timeline : x[1] = MaxTime+1"])
+        "    ELSE \\E x \\in timeline : x[1] = MaxTime+1"]
 
 -- FIXME kramer@acm.org reto -- For the linear clock, I should really stop
 -- the clock the very first time "now + x[1]" exceeds MaxTime and stutter
 -- from there.
 genTimerRemoveAndSchedule =
     inlineOperatorDef $ unlines
-      (["TimerRemoveAndSchedule(timeline,remove,new,cancel) ==",
+      [ "TimerRemoveAndSchedule(timeline,remove,new,cancel) ==",
         "  LET now == Now(timeline)",
         "      removeX == { t \\in timeline: \\E p \\in remove: t[2] = p } ",
         "      cancelX == { t \\in timeline: \\E p \\in cancel: t[2] = p } ",
@@ -384,7 +384,7 @@ genTimerRemoveAndSchedule =
         -- on to freeze the time.
         "      newSet == {<<Min2(now+x[1], MaxTime+1), x[2]>> : x \\in new }",
         "      newSetPruned == { t \\in newSet : t[1] <= MaxTime+1 }",
-        "   IN ctimeline \\cup newSetPruned"])
+        "   IN ctimeline \\cup newSetPruned"]
 
 {-
 -- mod MaxTime clock
@@ -400,26 +400,26 @@ genTimerRemoveAndSchedule =
 --                              time
 genTimerNext =
     inlineOperatorDef $ unlines
-      (["TimerNext(timeline) == ",
+      [ "TimerNext(timeline) == ",
         "  IF timeline = {} \\/ LinearTimeMaxd(timeline)",
         "  THEN \"\" \\* some value that is not in the Timers set",
         "  ELSE LET now == Now(timeline)",
         "           entry == CHOOSE x \\in timeline: x[1] = now",
-        "        IN entry[2][2] \\* timer in <<t, <<role, _timer_>> >>"])
+        "        IN entry[2][2] \\* timer in <<t, <<role, _timer_>> >>"]
 
 genRoleNext =
     inlineOperatorDef $ unlines
-      (["RoleNext(timeline) ==",
+      [ "RoleNext(timeline) ==",
         "  IF timeline = {} \\/ LinearTimeMaxd(timeline)",
         "  THEN \"\" \\* some value that is not in the Timers set",
         "  ELSE LET now == Now(timeline)",
         "           entry == CHOOSE x \\in timeline: x[1] = now",
-        "        IN entry[2][1] \\* role in <<t, <<_role_, timer>> >>"])
+        "        IN entry[2][1] \\* role in <<t, <<_role_, timer>> >>"]
 
 lower = map toLower
 
 hasGlobalRole :: SH_FL_Spec -> Bool
-hasGlobalRole spec = [] /= (everything (++) ([] `mkQ` f)) spec
+hasGlobalRole spec = [] /= everything (++) ([] `mkQ` f) spec
     where f (SH_RoleDef _ "GLOBAL" _ _) = [True]
           f _ = []
 

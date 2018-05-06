@@ -153,7 +153,7 @@ roll ((gil, il):rest) i f acc =
 hasAwait :: [SH_GuardedInstrList] -> Bool
 hasAwait = any hasAwait0
   where hasAwait0 :: SH_GuardedInstrList -> Bool
-        hasAwait0 gil = [] /= (everything (++) ([] `mkQ` f)) gil
+        hasAwait0 gil = [] /= everything (++) ([] `mkQ` f) gil
           where f (SH_I_Await _ _) = [True]
                 f _ = []
 
@@ -249,7 +249,7 @@ beautifyLAND = everywhere (mkT f)
     where f (AS_LAND info l) = AS_LAND info $ flatten l
           f x = x
           flatten [] = []
-          flatten ((AS_LAND _ l):rest) = flatten $ l ++ rest
+          flatten (AS_LAND _ l : rest) = flatten $ l ++ rest
           flatten (h:rest) = h : flatten rest
 
 rewriteRewind :: SH_FL_Spec -> SH_FL_Spec
@@ -344,14 +344,14 @@ rewritePCLocationGuards spec = everywhere (mkT (f spec)) spec
                     label hook (rewritePCLocGIL spec role gil)
         f _ x = x
 
-rewritePCLoc :: SH_FL_Spec -> String -> (Maybe SH_ExprWrapper)
-                    -> (Maybe SH_ExprWrapper)
+rewritePCLoc :: SH_FL_Spec -> String -> Maybe SH_ExprWrapper
+                    -> Maybe SH_ExprWrapper
 rewritePCLoc spec role Nothing = Nothing
 rewritePCLoc spec role guard   = everywhere (mkT (f spec role)) guard
   where f spec role i@(AS_Ident _ _ name) =
             case break (=='@') name of
               (_,[]) -> i -- no @ present
-              (root, ('@':label)) ->
+              (root, '@':label) ->
                   AS_InfixOP epos AS_EQ
                     (mk_AS_Ident $ mkPC root)
                     (mk_AS_Ident $ idxOfAwaitIn spec role label)

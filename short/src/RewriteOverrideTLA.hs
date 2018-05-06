@@ -30,7 +30,7 @@ substTLA spec = fixP (everywhere (mkT f)) spec
           fixP f x = if f x == x then x else fixP f (f x)
 
 findOverride :: SH_FL_Spec -> (String,String) -> [(String, AS_Expression)]
-findOverride spec (i, defname) = (everything (++) ([] `mkQ` (f defname))) spec
+findOverride spec (i, defname) = everything (++) ([] `mkQ` f defname) spec
     where f defname (SH_VerbTLAOp _ homeInteraction (Just oI) tla)
               | i `elem` oI = let (AS_OperatorDef _
                                      (AS_OpHead (AS_Ident _ _ odefname) _args)

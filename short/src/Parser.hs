@@ -89,7 +89,7 @@ roleList = do{ p <- getPosition
 interaction :: TLAParser SH_ConcernElement
 interaction = do{ p <- getPosition
                 ; e <- option True
-                         (do { (reserved "DISABLE" <|> reserved "DISABLED")
+                         (do { reserved "DISABLE" <|> reserved "DISABLED"
                              ; return False
                              })
                 ; reserved "INTERACTION"
