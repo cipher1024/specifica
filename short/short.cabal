@@ -35,7 +35,7 @@ library
                      Syntax,
                      SyntaxPretty,
                      TLACodeGen
-  build-depends:     base, containers, dataenc, Crypto, parsec >= 3.0.1,
+  build-depends:     base, dataenc, Crypto, parsec >= 3.0.1,
                      regex-compat, wl-pprint, syb, tlaplus
   extensions:        DeriveDataTypeable
                      FlexibleContexts

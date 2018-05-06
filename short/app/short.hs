@@ -1,5 +1,3 @@
-{-# language LambdaCase #-}
-
 module Main where
 
 import Data.Either

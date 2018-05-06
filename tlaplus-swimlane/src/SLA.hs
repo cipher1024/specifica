@@ -1,5 +1,6 @@
 module SLA (readSLA) where
 
+import Data.Bifunctor
 import Text.ParserCombinators.Parsec
 
 import Language.TLAPlus.Parser( tlaspec, cfgspec, mkState )
@@ -253,10 +254,10 @@ ident = AS_Ident (mkDummyInfo "") []
 
 convertEtoVA :: Expr -> VA_Value
 convertEtoVA (RecE m) =
-    let l = map (\(k,v) -> (convertItoVA k, convertEtoVA v)) $ Map.toList m
+    let l = map (bimap convertItoVA convertEtoVA) $ Map.toList m
      in VA_Rec $ Map.fromList l
 convertEtoVA (MapE m) =
-    let l = map (\(k,v) -> (convertEtoVA k, convertEtoVA v)) $ Map.toList m
+    let l = map (bimap convertEtoVA convertEtoVA) $ Map.toList m
      in VA_Map $ Map.fromList l
 convertEtoVA (SetE s) = VA_Set $ Set.map (\e -> convertEtoVA e) s
 convertEtoVA (SeqE l) = VA_Seq $ map (\e -> convertEtoVA e) l

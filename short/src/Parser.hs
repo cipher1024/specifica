@@ -18,7 +18,7 @@ import Syntax
 
 import Language.TLAPlus.Parser as TLAParser -- for expression parsing
 
-reserved :: String -> ParsecT [Char] u Identity ()
+reserved :: String -> ParsecT String u Identity ()
 reserved s =     reservedX s               -- as is, e.g. "Set" for types
              <|> reservedX (map toLower s) -- all lower case keywords
              <|> reservedX (map toUpper s) -- all upper case keywords
@@ -799,7 +799,7 @@ paramtype = do{ p <- getPosition
               }
 
 -------------------------------------------------------------------------------
-lexer :: P.GenTokenParser [Char] u Identity
+lexer :: P.GenTokenParser String u Identity
 lexer = lexer0{P.reservedOp = rOp}
           where
             lexer0      = P.makeTokenParser shortdef
@@ -872,7 +872,7 @@ lexer = lexer0{P.reservedOp = rOp}
             -- isAlphaOrUnderscore c = isAlpha c || c == '_'
             lexeme p = do { x <- p; P.whiteSpace lexer0; return x }
 
-shortdef :: P.GenLanguageDef [Char] u Identity
+shortdef :: P.GenLanguageDef String u Identity
 shortdef = emptyDef {
   P.commentStart    = "(*"
 , P.commentEnd      = "*)"
@@ -969,39 +969,39 @@ shortdef = emptyDef {
   where
     symbs = filter (not . isAlpha) . concat $ P.reservedOpNames shortdef
 
--- dot :: ParsecT [Char] u Identity String
+-- dot :: ParsecT String u Identity String
 -- dot             = P.dot lexer
-parens :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+parens :: ParsecT String u Identity a -> ParsecT String u Identity a
 parens          = P.parens lexer
--- braces :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+-- braces :: ParsecT String u Identity a -> ParsecT String u Identity a
 -- braces          = P.braces lexer
--- squares :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+-- squares :: ParsecT String u Identity a -> ParsecT String u Identity a
 -- squares         = P.squares lexer
--- semiSep :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+-- semiSep :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 -- semiSep         = P.semiSep lexer
--- semiSep1 :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+-- semiSep1 :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 -- semiSep1        = P.semiSep1 lexer
-commaSep :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+commaSep :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 commaSep        = P.commaSep lexer
--- commaSep1 :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+-- commaSep1 :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 -- commaSep1       = P.commaSep1 lexer
--- brackets :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+-- brackets :: ParsecT String u Identity a -> ParsecT String u Identity a
 -- brackets        = P.brackets lexer
-whiteSpace :: ParsecT [Char] u Identity ()
+whiteSpace :: ParsecT String u Identity ()
 whiteSpace      = P.whiteSpace lexer
--- symbol :: String -> ParsecT [Char] u Identity String
+-- symbol :: String -> ParsecT String u Identity String
 -- symbol          = P.symbol lexer
-identifier :: ParsecT [Char] u Identity String
+identifier :: ParsecT String u Identity String
 identifier      = P.identifier lexer
-reservedX :: String -> ParsecT [Char] u Identity ()
+reservedX :: String -> ParsecT String u Identity ()
 reservedX       = P.reserved lexer
-reservedOp :: String -> ParsecT [Char] u Identity ()
+reservedOp :: String -> ParsecT String u Identity ()
 reservedOp      = P.reservedOp lexer
--- integer :: ParsecT [Char] u Identity Integer
+-- integer :: ParsecT String u Identity Integer
 -- integer         = P.integer lexer
--- natural :: ParsecT [Char] u Identity Integer
+-- natural :: ParsecT String u Identity Integer
 -- natural         = P.natural lexer
--- charLiteral :: ParsecT [Char] u Identity Char
+-- charLiteral :: ParsecT String u Identity Char
 -- charLiteral     = P.charLiteral lexer
-stringLiteral :: ParsecT [Char] u Identity String
+stringLiteral :: ParsecT String u Identity String
 stringLiteral   = P.stringLiteral lexer

@@ -354,7 +354,7 @@ basicExpr = choice $ basicExprListNoAngularClose ++
 basicExprNoAngularClose :: TLAParser AS_Expression
 basicExprNoAngularClose = choice basicExprListNoAngularClose
 
-basicExprListNoAngularClose :: [ParsecT [Char] PState Identity AS_Expression]
+basicExprListNoAngularClose :: [ParsecT String PState Identity AS_Expression]
 basicExprListNoAngularClose =
     [ parens expression
     , letExpr
@@ -743,7 +743,7 @@ cfgboolean =     do{ p <- getPosition
                    ; return $ CFG_Bool (mkCfgInfo p) False
                    }
 -------------------------------------------------------------------------------
-lexer :: P.GenTokenParser [Char] u Identity
+lexer :: P.GenTokenParser String u Identity
 lexer = lexer0{P.reservedOp = rOp}
           where
             lexer0      = P.makeTokenParser tladef
@@ -816,7 +816,7 @@ lexer = lexer0{P.reservedOp = rOp}
             -- isAlphaOrUnderscore c = isAlpha c || c == '_'
             lexeme p = do { x <- p; P.whiteSpace lexer0; return x }
 
-tladef :: P.GenLanguageDef [Char] u Identity
+tladef :: P.GenLanguageDef String u Identity
 tladef = emptyDef {
   P.commentStart    = "(*"
 , P.commentEnd      = "*)"
@@ -884,34 +884,34 @@ tladef = emptyDef {
   where
     symbs = filter (not . isAlpha) . concat $ P.reservedOpNames tladef
 
-dot :: ParsecT [Char] u Identity String
+dot :: ParsecT String u Identity String
 dot             = P.dot lexer
-parens :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+parens :: ParsecT String u Identity a -> ParsecT String u Identity a
 parens          = P.parens lexer
-braces :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+braces :: ParsecT String u Identity a -> ParsecT String u Identity a
 braces          = P.braces lexer
-squares :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity a
+squares :: ParsecT String u Identity a -> ParsecT String u Identity a
 squares         = P.squares lexer
 -- semiSep         = P.semiSep lexer
 -- semiSep1        = P.semiSep1 lexer
-commaSep :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+commaSep :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 commaSep        = P.commaSep lexer
-commaSep1 :: ParsecT [Char] u Identity a -> ParsecT [Char] u Identity [a]
+commaSep1 :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 commaSep1       = P.commaSep1 lexer
 -- brackets        = P.brackets lexer
-whiteSpace :: ParsecT [Char] u Identity ()
+whiteSpace :: ParsecT String u Identity ()
 whiteSpace      = P.whiteSpace lexer
-symbol :: String -> ParsecT [Char] u Identity String
+symbol :: String -> ParsecT String u Identity String
 symbol          = P.symbol lexer
-identifier :: ParsecT [Char] u Identity String
+identifier :: ParsecT String u Identity String
 identifier      = P.identifier lexer
-reserved :: String -> ParsecT [Char] u Identity ()
+reserved :: String -> ParsecT String u Identity ()
 reserved        = P.reserved lexer
-reservedOp :: String -> ParsecT [Char] u Identity ()
+reservedOp :: String -> ParsecT String u Identity ()
 reservedOp      = P.reservedOp lexer
 -- integer         = P.integer lexer
-natural :: ParsecT [Char] u Identity Integer
+natural :: ParsecT String u Identity Integer
 natural         = P.natural lexer
 -- charLiteral     = P.charLiteral lexer
-stringLiteral :: ParsecT [Char] u Identity String
+stringLiteral :: ParsecT String u Identity String
 stringLiteral   = P.stringLiteral lexer

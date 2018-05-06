@@ -19,7 +19,6 @@ library:
     dependencies:
       - base
       - containers
-      - regex-compat
       - tlaplus
       - tlaplus-eval
       - array

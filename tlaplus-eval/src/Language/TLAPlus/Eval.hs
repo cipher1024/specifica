@@ -1,5 +1,7 @@
 module Language.TLAPlus.Eval where
 
+import Data.Bifunctor
+
 import Prelude hiding ((<$>))
 -- import Control.Monad.Error
 import Control.Monad.Except
@@ -598,13 +600,13 @@ op_funapp i va argv@(VA_FunArgList argvaluelist) =
     (VA_Map map) -> mapLookup env argvaluelist map e va "map"
     (VA_Rec map) -> mapLookup env argvaluelist map e va "record"
     (VA_Set _) -> throwError $ FunAppIllegalOperand e va argv
-    (VA_Seq l) -> let map = Map.fromList $ List.map (\(i,v) -> (VA_Int i, v))
+    (VA_Seq l) -> let map = Map.fromList $ List.map (first VA_Int)
                                                     (zip [1..length l] l)
                    in mapLookup env argvaluelist map e va "sequence"
     (VA_Int _) -> throwError $ FunAppIllegalOperand e va argv
     (VA_Bool _) -> throwError $ FunAppIllegalOperand e va argv
     (VA_String l) ->
-       let map = Map.fromList $ List.map (\(i,v) -> (VA_Int i, VA_Char v))
+       let map = Map.fromList $ List.map (bimap VA_Int VA_Char)
                                          (zip [1..length l] l)
         in mapLookup env argvaluelist map e va "String"
     (VA_Char _) -> throwError $ FunAppIllegalOperand e va argv
@@ -950,7 +952,7 @@ addBuiltIn e =
 
 -- evalE uses this table for BIFs, the BIF itself does not carry the function
 -- because then Syntax would have a
-bif_Table :: [(([Char], [Char]), Env -> ThrowsError VA_Value)]
+bif_Table :: [((String, String), Env -> ThrowsError VA_Value)]
 bif_Table = -- merge with addBuiltIn, I hate to update 2 places!
     [(("TLA+", "BOOLEAN"), bif_BOOLEAN)
     ,(("FiniteSet", "Cardinality"), bif_Cardinality)
