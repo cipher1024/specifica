@@ -1,4 +1,7 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Language.TLAPlus.Syntax where
+
+import Control.Lens
 
 import Data.Map as Map hiding (map)
 import Data.Set as Set hiding (map)
@@ -313,3 +316,6 @@ ppTY TY_RecType = "RecType"
 ppTY TY_SeqType = "SeqType"
 ppTY TY_Var = "Variable"
 ppTY TY_FunArgList = "FunArgListType"
+
+
+makePrisms ''AS_UnitDef

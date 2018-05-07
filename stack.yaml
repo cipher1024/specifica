@@ -4,6 +4,7 @@ packages:
 - tlaplus/
 - tlaplus-eval/
 - tlaplus-swimlane/
+- tlaplus-quickcheck/
 extra-deps:
 - Crypto-4.2.5.1
 - QuickCheck-2.11.3

@@ -21,7 +21,7 @@ install:
   - stack install weeder
 
 script:
-  - stack build
+  - stack test
   - curl -sL https://raw.github.com/ndmitchell/hlint/master/misc/travis.sh | sh -s .
   - curl -sL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
   # - stack exec weeder -- .
