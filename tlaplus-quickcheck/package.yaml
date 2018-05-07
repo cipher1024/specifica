@@ -1,15 +1,6 @@
 
 name: tlaplus-quickcheck
 
-dependencies:
-  - base
-  - tlaplus
-  - tlaplus-eval
-  - parsec >= 3.0.1
-  - text
-  - directory
-  - hspec
-  - lens
 ghc-options:
   - -Wall
   - -fwarn-tabs
@@ -17,8 +8,16 @@ ghc-options:
 
 library:
   source-dirs: src
+  dependencies:
+    - base
 
 tests:
   test1:
     main:                Spec.hs
     source-dirs:         test
+    dependencies:
+      - base
+      - tlaplus
+      - parsec >= 3.0.1
+      - hspec
+      - lens
