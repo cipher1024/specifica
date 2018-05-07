@@ -142,10 +142,10 @@ mkLAND _ _ = undefined
 substGIL :: [(String, SH_ExprWrapper)] -> [SH_GuardedInstrList]
             -> [SH_GuardedInstrList]
 substGIL l = everywhere (mkT f)
-  where f i@(AS_Ident _ _ s) =
+  where f i@(AS_Ident (AS_Name _ _ s)) =
             case lookup s l of Nothing -> i
                                Just (SH_ExprWrapper _ e) -> e
-                               _ -> undefined
+                               _ -> i
         f x = x
 
 splitEXT_HOOK :: SH_FL_Spec -> SH_FL_Spec
@@ -209,7 +209,7 @@ combineEXT_HOOK l = concatMap comb l
         mkIL _ = undefined
         mkArgs :: [String] -> [(String, SH_ExprWrapper)]
         mkArgs l = map (\(s,i) ->
-                          (s, SH_ExprWrapper upos $ mk_AS_Ident (mkArg i))
+                          (s, SH_ExprWrapper upos $ mk_Ident' (mkArg i))
                        ) $ zip l [1..length l]
         mkArg i = "a" ++ show i
 
@@ -265,8 +265,8 @@ wipePos = everywhere (mkT f)
         f x | otherwise = x
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
+-- mk_AS_Ident :: String -> AS_Expression
+-- mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> SourcePos
 mkPos = newPos

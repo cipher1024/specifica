@@ -1,11 +1,14 @@
 module Language.TLAPlus.Eval where
 
+import Control.Lens
+
 import Data.Bifunctor
 
-import Prelude hiding ((<$>))
+import Prelude
 -- import Control.Monad.Error
 import Control.Monad.Except
 import Debug.Trace as Trace
+import Data.Maybe
 import qualified Data.Set as Set (union, intersection,
                                   isSubsetOf, empty, size, insert)
 import Data.Set as Set (fromList, elems, (\\), member)
@@ -34,11 +37,11 @@ evalReturnEnv specs cfg =
       ; return (env'', vs)
       }
     where mkBinding :: String -> (CFG_Ident, CFG_Value)
-                    -> (AS_Expression, VA_Value)
+                    -> (AS_Name, VA_Value)
           mkBinding q (i,v) = (toASIdent q i, toASValue v)
-          toASIdent :: String -> CFG_Ident -> AS_Expression
+          toASIdent :: String -> CFG_Ident -> AS_Name
           toASIdent _q (CFG_Ident _ i) = -- FIXME what about q?
-              AS_Ident (mkDummyInfo "a-cfg-value") [] i
+              AS_Name (mkDummyInfo "a-cfg-value") [] i
           toASValue :: CFG_Value -> VA_Value
           toASValue (CFG_Atom _ s) = VA_Atom s
           toASValue (CFG_Bool _ b) = VA_Bool b
@@ -108,19 +111,18 @@ evalET env e =
     else evalE env e
 
 evalE :: Env -> AS_Expression -> ThrowsError VA_Value
-evalE env i@(AS_Ident _info _quallist _name) = --FIXME lookup proper env for qual
-    lookupBinding i env "identifier" >>= \e -> case e of
+evalE env (AS_Ident i@(AS_Name _info _quallist _name)) = --FIXME lookup proper env for qual
+    lookupBinding i env "identifier" >>= \case
 {-
         -- FIXME check bounds on function invocation!
       (VA_FunctionDef _info _head _bounds opExpr) -> evalET env opExpr
         -- FIXME should I call evalOperator here?
         -- FIXME do I still need evalE AS_OpApp?
 -}
-      (VA_Var v) -> case v of
-                      Nothing -> return $ VA_Var (Just (VA_String "undefined")) -- throwError $ RdBeforeWr i
-                      Just v' -> return v'
+      VA_Var Nothing -> return $ VA_Var (Just (VA_String "undefined")) -- throwError $ RdBeforeWr i
+      VA_Var (Just v') -> return v'
       (VA_OperatorDef _info _head opExpr) -> evalET env opExpr
-      _ -> return e
+      e -> return e
 
 evalE env _e@(AS_FunArgList _ l) =
     VA_FunArgList `liftM` mapM (\e -> evalET env e) l
@@ -129,7 +131,7 @@ evalE env e@(AS_OpApp _info qname exprargs) = -- FIXME cross check w/ Ident hdl
     do{ op <- lookupBinding qname env "operator"
       ; case op of
           (VA_OperatorDef _info (AS_OpHead _name argnames) expr) ->
-              evalOperator(env, argnames, exprargs, expr)
+              evalOperator(env, mapMaybe (preview _AS_Ident) argnames, exprargs, expr)
           _ ->
               throwError $ Default ("FIXME - op="++show op++"////"++show e)
       }
@@ -205,7 +207,7 @@ evalE env e@(AS_Choose _info (AS_QBound1 qvar qexpr) bexpr) =
              ) elements
       ; case v of
           Just v' -> return v'
-          Nothing -> throwError $ ChooseNoMatch qvar qexpr bexpr elements env
+          Nothing -> throwError $ ChooseNoMatch (AS_Ident qvar) qexpr bexpr elements env
       }
     where findM :: (Monad m) => (a -> m Bool) -> [a] -> m (Maybe a)
           findM _ [] = return Nothing
@@ -277,7 +279,7 @@ evalE _env e = throwError $ NoRuleError e -- FIXME for debugging only
 toInfoE :: AS_InfoU -> AS_UnitDef -> AS_InfoE
 toInfoE pos u = (pos, Just u, Nothing)
 
-nameU :: AS_UnitDef -> AS_Expression
+nameU :: AS_UnitDef -> AS_Name
 nameU (AS_FunctionDef _ head _ _) = head
 nameU (AS_OperatorDef _ (AS_OpHead head _) _) = head
 nameU _ = error "unspecified"
@@ -293,7 +295,7 @@ eval_dot op loc@(env, _parent, _, b) va =
     -- FIXME perhaps also check to make sure "name" is not
     -- bound!
   then case b of
-         (AS_Ident _info [] name) ->
+         (AS_Ident (AS_Name _info [] name)) ->
            op_dot loc va (VA_String name)
          _ ->
            do{ vb <- evalET env b
@@ -315,17 +317,17 @@ evalOpInfix :: Env
 -- What is the right monad to combine these sets of values (a value being the
 -- record of all variables in the TLA+ spec).
 evalOpInfix env _op@AS_EQ _parent
-            (AS_PostfixOP _ AS_Prime a@(AS_Ident _ [] _i)) b =
+            (AS_PostfixOP _ AS_Prime a@(AS_Ident a'@(AS_Name _ [] _i))) b =
     evalET env a >>= \case
       (VA_Var _) -> do{ vb <- evalET env b
-                      ; env' <- replace env (a, vb)
+                      ; env' <- replace env (a', vb)
                       ; Trace.trace (ppEnv env') $ return vb
                       }
       _ -> error "unspecified"
-evalOpInfix env op@AS_EQ parent a@(AS_Ident _ [] _i) b =
+evalOpInfix env op@AS_EQ parent a@(AS_Ident a'@(AS_Name _ [] _i)) b =
     evalET env a >>= \va -> case va of
       (VA_Var _) -> do{ vb <- evalET env b
-                      ; env' <- replace env (a, vb)
+                      ; env' <- replace env (a', vb)
                       ; Trace.trace (ppEnv env') $ return vb
                       }
       _ ->
@@ -623,12 +625,12 @@ op_funapp i va argv@(VA_FunArgList argvaluelist) =
          ; envir' <- foldM (\env (n,v) -> bind env (n,v)) env
                            (zip argnames argvaluelist)
          ; mapM_ (\(AS_QBoundN [i] range) ->
-             do{ let qe = AS_InfixOP _info AS_In i range
+             do{ let qe = AS_InfixOP _info AS_In (AS_Ident i) range
                ; evalET envir' qe >>= \r ->
                    case r of
                      VA_Bool True  -> return ()
-                     VA_Bool False -> evalET envir' i >>= \val ->
-                       throwError $ ValueOutOfBounds i range e val env
+                     VA_Bool False -> evalET envir' (AS_Ident i) >>= \val ->
+                       throwError $ ValueOutOfBounds (AS_Ident i) range e val env
                      _ -> error "unspecified"
                }) qbounds
          ; if length argnames == length argvaluelist
@@ -718,7 +720,7 @@ op_closefunapp :: Monad m => p -> a -> m a
 op_closefunapp _i a =  return a -- noop
 
 --
-evalOperator :: (Env, [AS_Expression], [AS_Expression], AS_Expression) -> ThrowsError VA_Value
+evalOperator :: (Env, [AS_Name], [AS_Expression], AS_Expression) -> ThrowsError VA_Value
 evalOperator(env, argnames, exprargs, expr) =
     if length argnames == 0
        then evalET env expr
@@ -786,7 +788,7 @@ data EvalError = Default String -- FIXME, do I really need this?
                | TypeMissmatch Infix_Info VA_Value VA_Value [TY_Type]
                | IllegalType AS_Expression AS_Expression VA_Value
                              TY_Type String
-               | NameNotInScope AS_Expression String
+               | NameNotInScope AS_Name String
                | NameAlreadyBound AS_Expression VA_Value String
                | ValueOutOfBounds AS_Expression AS_Expression AS_Expression
                                   VA_Value Env
@@ -805,79 +807,79 @@ ppError (NoRuleError e) =
     --     pEdoc = case pE of
     --               Just pE' ->
     --                   text "in expression at " <+>
-    --                   text (ppLocE pE') <//> text ":" <$> ppE pE'
+    --                   text (ppLocE pE') <//> text ":" <++> ppE pE'
     --               Nothing -> empty in
-    pp $ nest 4 $ (text $ ppLocE e) <//> text ":" <$>
+    pp $ nest 4 $ (text $ ppLocE e) <//> text ":" <++>
            (text "No rule to evaluate" <+> parens (ppE e))
 ppError (UnknownOperatorError s) = s
 ppError (TypeMissmatch (_env, pE, ea, eb) va vb expectedTypes) =
-    pp $ nest 4 $ (text $ ppLocE pE) <//> text ":" <$>
-           nest 4 (text "Type missmatch. Expected types" <+>
-                   cat (punctuate comma $ map (\ty -> text $ ppTY ty)
-                                               expectedTypes) <//>
-                   text ", but found" <+>
-                   text (ppTY $ typeOf va) <//> text ", and" <+>
-                   text (ppTY $ typeOf vb) <+>
-                   text "expressions"
-            <$> arm ea va <//> text ", and"
-            <$> arm eb vb)
-            <$> nest 4 (text "in expression:" <$> ppE pE)
+    pp $ nest 4 $ text (ppLocE pE) <//> text ":"
+            <++> nest 4 (    text "Type missmatch. Expected types" <+>
+                            cat (punctuate comma $ map (\ty -> text $ ppTY ty)
+                                                        expectedTypes) <//>
+                            text ", but found" <+>
+                            text (ppTY $ typeOf va) <//> text ", and" <+>
+                            text (ppTY $ typeOf vb) <+>
+                            text "expressions"
+                        <++> arm ea va <//> text ", and"
+                        <++> arm eb vb)
+            <++> nest 4 (text "in expression:" <++> ppE pE)
     where arm e v = ppE e <+> parens (text "=" <+> ppVA v) <+>
                     text "at" <+> (text $ ppLocE e)
 ppError (IllegalType parentE condE condV expectedType detail) =
-    pp $ nest 4 $ (text $ ppLocE condE) <//> text ":" <$>
+    pp $ nest 4 $ (text $ ppLocE condE) <//> text ":" <++>
            nest 4 (text ("Illegal type in " ++ detail)
-                   <$> ppE condE <+> parens (text "=" <+> ppVA condV))
-           <$> text "expected type" <+> text (ppTY expectedType)
+                   <++> ppE condE <+> parens (text "=" <+> ppVA condV))
+           <++> text "expected type" <+> text (ppTY expectedType)
            <//> text ", found type" <+> text (ppTY $ typeOf condV) <+>
                 text "in expression"
-           <$> indent 4 (ppE parentE)
-           <$> text "at" <+> (text $ ppLocE parentE)
+           <++> indent 4 (ppE parentE)
+           <++> text "at" <+> (text $ ppLocE parentE)
 ppError (NameNotInScope ident kind) =
-    pp $ nest 4 $ (text $ ppLocE ident) <//> text ":"
-           <$> text kind <+> dquotes (ppE ident) <+>
+    pp $ nest 4 $ (text $ ppLocE $ AS_Ident ident) <//> text ":"
+           <++> text kind <+> dquotes (ppE $ AS_Ident ident) <+>
                text "not in scope."
 ppError (NameAlreadyBound ident v kind) =
     pp $ nest 4 $ (text $ ppLocE ident) <//> text ":"
-           <$> text kind <+> dquotes (ppE ident) <+>
+           <++> text kind <+> dquotes (ppE ident) <+>
                text "is alreaady bound. TLA+ does not allow shadowing."
-           <$> indent 4 (ppVA v)
+           <++> indent 4 (ppVA v)
 ppError (ValueOutOfBounds i q fappl val env) =
     pp $ nest 4 $ (text $ ppLocE i) <//> text ":"
-           <$> text "value of" <+> parens (ppE i) <+>
-               text "violated range" <+> ppE q
-           <$> text "in expression" <+> ppE fappl <+>
-               text "at:" <+> (text $ ppLocE fappl)
-           <$> nest 4 (text "where" <+> parens (ppE i) <+> text "was bound to"
-                       <$> ppVA val)
-           <$> nest 4 (text "in context" -- FIXME only show free vars in q
-                       <$> vcat (map (\(id, v) ->
+           <++> text "value of" <+> parens (ppE i) <+>
+                text "violated range" <+> ppE q
+           <++> text "in expression" <+> ppE fappl <+>
+                text "at:" <+> (text $ ppLocE fappl)
+           <++> nest 4 (text "where" <+> parens (ppE i) <+> text "was bound to"
+                       <++> ppVA val)
+           <++> nest 4 (text "in context" -- FIXME only show free vars in q
+                       <++> vcat (map (\(id, v) ->
                                    ppId id <+> text "==>" <+> ppVA v) env))
 ppError (ChooseNoMatch i q expr values env) =
     pp $ nest 4 $ (text $ ppLocE i) <//> text ":"
-           <$> text "no value of" <+> parens (ppE i) <+>
-               text "in" <+> ppE q
-           <$> text "satisfied expression" <+> parens (ppE expr)
-           <$> nest 4 (text "tried the following values"
-                       <$> vcat (map ppVA values))
-           <$> nest 4 (text "in context" -- FIXME only show free vars in expr
-                       <$> vcat (map (\(id, v) ->
+           <++> text "no value of" <+> parens (ppE i) <+>
+                text "in" <+> ppE q
+           <++> text "satisfied expression" <+> parens (ppE expr)
+           <++> nest 4 (text "tried the following values"
+                       <++> vcat (map ppVA values))
+           <++> nest 4 (text "in context" -- FIXME only show free vars in expr
+                       <++> vcat (map (\(id, v) ->
                                    ppId id <+> text "==>" <+> ppVA v) env))
 ppError (KeyNotFound _env e idx map kind) =
     pp $ nest 4 $ (text $ ppLocE e) <//> text ":"
-           <$> text "key" <+> parens (ppVA idx) <+>
-               text "not found in" <+> text kind
-           <$> indent 4 (ppVA map)
-           <$> text "in expression" <+> parens (ppE e)
+           <++> text "key" <+> parens (ppVA idx) <+>
+                text "not found in" <+> text kind
+           <++> indent 4 (ppVA map)
+           <++> text "in expression" <+> parens (ppE e)
 ppError (FunAppIllegalOperand e va argv) =
     pp $ nest 4 $ (text $ ppLocE e) <//> text ":"
-           <$> nest 4 (text "Expression (function application)" <$> ppVA argv)
-           <$> nest 4 (text "cannot be applied to operand" <+>
-                       parens (ppVA va)) <$>
-               text "of type" <+> text (ppTY $ typeOf va)
-ppError (RdBeforeWr e@(AS_Ident _info _quallist name)) =
+           <++> nest 4 (text "Expression (function application)" <++> ppVA argv)
+           <++> nest 4 (text "cannot be applied to operand" <+>
+                       parens (ppVA va)) <++>
+                text "of type" <+> text (ppTY $ typeOf va)
+ppError (RdBeforeWr e@(AS_Ident (AS_Name _info _quallist name))) =
     pp $ nest 4 $ (text $ ppLocE e) <//> text ":"
-           <$> text "read of uninitialized variable" <+> text name
+           <++> text "read of uninitialized variable" <+> text name
 ppError _ = error "unspecified"
 -- instance Error EvalError where
 --     noMsg = Default "An error has occured"
@@ -908,23 +910,22 @@ type Binding = (Id, VA_Value) -- add module qualifiers
 mkEmptyEnv :: [a]
 mkEmptyEnv = []
 
-bind :: Env -> (AS_Expression, VA_Value) -> ThrowsError Env
+bind :: Env -> (AS_Name, VA_Value) -> ThrowsError Env
 bind env (name, expr) = return $ (toId name, expr) : env
 
-replace :: Env -> (AS_Expression, VA_Value) -> ThrowsError Env
+replace :: Env -> (AS_Name, VA_Value) -> ThrowsError Env
 replace env (name, expr) =
   let env' = map (\(n,e) -> if n == toId name then (n, expr) else (n, e)) env
    in return env'
 
-lookupBinding :: AS_Expression -> Env -> String -> ThrowsError VA_Value
+lookupBinding :: AS_Name -> Env -> String -> ThrowsError VA_Value
 lookupBinding i env kind =
     case lookup (toId i) env of
       Just expr -> return $ expr
       Nothing -> throwError $ NameNotInScope i kind
 
-toId :: AS_Expression -> Id
-toId (AS_Ident _info qual name) = (qual, name)
-toId _ = error "unspecified"
+toId :: AS_Name -> Id
+toId (AS_Name _info qual name) = (qual, name)
 
 ppId :: Id -> Doc
 ppId (quallist, name) =
@@ -933,7 +934,7 @@ ppId (quallist, name) =
 ppEnv :: Env -> String
 ppEnv env =
   pp $ nest 4 (text "Environment"
-         <$> vcat (map (\(id, v) ->
+         <++> vcat (map (\(id, v) ->
                    ppId id <+> text "==>" <+> ppVA v) env))
 
 addBuiltIn :: Env -> ThrowsError Env
@@ -945,9 +946,9 @@ addBuiltIn e =
     bind e (bif "TLC" "Print" ["out", "val"]) >>= \e ->
     bind e (bif "SPECIFICA" "TypeOf" ["val"])
   where
-    bif mod name args = (mkIdent name,
+    bif mod name args = (mk_Ident' name,
                          VA_OperatorDef mkInfoE
-                           (AS_OpHead (mkIdent name) (map mkIdent args))
+                           (AS_OpHead (mk_Ident' name) (map mk_Ident' args))
                            (AS_BIF mod name))
 
 -- evalE uses this table for BIFs, the BIF itself does not carry the function
@@ -961,8 +962,6 @@ bif_Table = -- merge with addBuiltIn, I hate to update 2 places!
     ,(("TLC",       "Print"),       bif_Print)
     ,(("SPECIFICA", "TypeOf"),      bif_TypeOf)]
 
-mkIdent :: String -> AS_Expression
-mkIdent = AS_Ident mkInfoE []
 mkInfoE :: (SourcePos, Maybe a1, Maybe a2)
 mkInfoE = mkDummyInfo  "bif-no-location"
 
@@ -1005,4 +1004,4 @@ bif_Seq env = bifArg env "S" >>= \v ->
 
 bifArg :: Env -> String -> ThrowsError VA_Value
 bifArg env arg =
-    lookupBinding (mkIdent arg) env ("BIF paramter "++arg)
+    lookupBinding (mk_Ident' arg) env ("BIF paramter "++arg)

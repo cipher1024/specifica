@@ -19,27 +19,46 @@ data AS_Spec = AS_Spec {name :: String,
 data AS_ExtendDecl = AS_ExtendDecl PPos.SourcePos [String]
                      deriving (Eq, Ord, Show, Data, Typeable)
 
-data AS_QBoundN = AS_QBoundN [AS_Expression] AS_Expression
+data AS_QBoundN = AS_QBoundN [AS_Name] AS_Expression
                   deriving (Eq, Ord, Show, Data, Typeable)
-data AS_QBound1 = AS_QBound1 AS_Expression AS_Expression
+data AS_QBound1 = AS_QBound1 AS_Name AS_Expression
                   deriving (Eq, Ord, Show, Data, Typeable)
 data AS_UnitDef =
-    AS_FunctionDef AS_InfoU AS_Expression [AS_QBoundN] AS_Expression
+    AS_FunctionDef AS_InfoU AS_Name [AS_QBoundN] AS_Expression
   | AS_OperatorDef AS_InfoU AS_OperatorHead AS_Expression
   | AS_Assume AS_InfoU AS_Expression
   | AS_Theorem AS_InfoU AS_Expression
-  | AS_ConstantDecl AS_InfoU [AS_Expression]
-  | AS_VariableDecl AS_InfoU [AS_Expression]
+  | AS_ConstantDecl AS_InfoU [AS_Name]
+  | AS_VariableDecl AS_InfoU [AS_Name]
   | AS_Separator AS_InfoU
     deriving (Eq, Ord, Show, Data, Typeable)
 
-data AS_OperatorHead = AS_OpHead AS_Expression [AS_Expression]
+data AS_OperatorHead = AS_OpHead AS_Name [AS_Expression]
+
                        deriving (Eq, Ord, Show, Data, Typeable)
 
+class HasIdent a where
+    mk_Ident :: AS_InfoE -> [String] -> String -> a
+
+mk_Ident' :: HasIdent a => String -> a
+mk_Ident' = mk_Ident (PPos.newPos "foo" 1 1,Nothing,Nothing) []
+
+mk_IdentAt :: HasIdent a => SourcePos -> [String] -> String -> a
+mk_IdentAt p = mk_Ident (p,Nothing,Nothing)
+
+instance HasIdent AS_Name where
+    mk_Ident = AS_Name
+
+instance HasIdent AS_Expression where
+    mk_Ident x ps n = AS_Ident $ AS_Name x ps n
+
+data AS_Name = AS_Name AS_InfoE [String] String -- possibly prefixed X!Y!a
+    deriving (Eq, Ord, Show, Data, Typeable)
+
 data AS_Expression =
-        AS_Ident AS_InfoE [String] String -- possibly prefixed X!Y!a
+        AS_Ident AS_Name
       | AS_FunArgList AS_InfoE [AS_Expression]
-      | AS_OpApp AS_InfoE AS_Expression [AS_Expression]
+      | AS_OpApp AS_InfoE AS_Name [AS_Expression]
       | AS_FunctionType AS_InfoE AS_Expression AS_Expression
       | AS_PrefixOP AS_InfoE AS_PrefixOp AS_Expression
       | AS_PostfixOP AS_InfoE AS_PostfixOp AS_Expression
@@ -162,7 +181,7 @@ formatLoc info =
      in path ++ ":" ++ show line ++ ":" ++ show col
 
 infoE :: AS_Expression -> AS_InfoE
-infoE (AS_Ident info _ _) = info
+infoE (AS_Ident (AS_Name info _ _)) = info
 infoE (AS_FunArgList info _) = info
 infoE (AS_OpApp info _ _) = info
 infoE (AS_FunctionType info _ _) = info
@@ -262,7 +281,7 @@ data VA_Value = VA_Map (Map VA_Value VA_Value)       -- map
               | VA_Char Char                         -- char, from string[2]
               | VA_Atom String                       -- atom, from cfg file
               | VA_FunctionDef AS_InfoE              -- fun[x] ==
-                  AS_Expression [AS_QBoundN]
+                  AS_Name [AS_QBoundN]
                   AS_Expression
               | VA_OperatorDef AS_InfoE              -- op(x) ==
                   AS_OperatorHead AS_Expression
@@ -317,5 +336,8 @@ ppTY TY_SeqType = "SeqType"
 ppTY TY_Var = "Variable"
 ppTY TY_FunArgList = "FunArgListType"
 
+extendedMod :: AS_ExtendDecl -> [String]
+extendedMod (AS_ExtendDecl _ ms) = ms
 
 makePrisms ''AS_UnitDef
+makePrisms ''AS_Expression

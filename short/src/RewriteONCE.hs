@@ -28,7 +28,7 @@ rewriteONCE = everywhere (mkT f)
           replONCE _rname (SH_Once _ role when label hooks ginstr) =
               let w = AS_LAND epos $
                         [AS_PrefixOP epos AS_Not
-                            (mk_AS_Ident (name_once label))] ++
+                            (mk_Ident' (name_once label))] ++
                          (case when of
                             Just (SH_ExprWrapper _ w) -> [w]
                             Just _  -> undefined
@@ -38,7 +38,7 @@ rewriteONCE = everywhere (mkT f)
                         (appendIL [SH_I_ChangeState upos
                                     [SH_ExprWrapper upos $ AS_InfixOP epos
                                     AS_EQ
-                                    (mk_AS_Ident $ name_once label)
+                                    (mk_Ident' $ name_once label)
                                     (AS_Bool epos True)]] ginstr)
           replONCE _ x = x
 
@@ -46,9 +46,6 @@ name_once :: String -> String
 name_once s = "g_once_" ++ s
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
-
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 

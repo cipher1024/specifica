@@ -10,17 +10,14 @@ inlineOperatorDef s =
     case runParser operatorDef mkState "" s of
           Right ast -> ast
           Left err -> AS_OperatorDef upos
-                         (AS_OpHead (mk_AS_Ident "ERROR") [])
-                         (mk_AS_Ident $ show err)
+                         (AS_OpHead (mk_Ident' "ERROR") [])
+                         (mk_Ident' $ show err)
 
 inlineExpr :: String -> AS_Expression
 inlineExpr s =
     case runParser expression mkState "" s of
           Right ast -> ast
-          Left err -> mk_AS_Ident $ show err
-
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
+          Left err -> mk_Ident' $ show err
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos

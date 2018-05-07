@@ -59,7 +59,7 @@ split0 ha l
   | hasAwait l =
       let pc = label ha
           rootG = AS_InfixOP epos AS_EQ
-                    (mk_AS_Ident $ mkPC pc)
+                    (mk_Ident' $ mkPC pc)
                     (AS_Num epos 0)
           (l', newH) = splitGIL pc l
           ha' = replGILs ha l'
@@ -113,7 +113,7 @@ splitGIL pc l =
                               goto = SH_I_ChangeState upos
                                        [SH_ExprWrapper upos
                                          (AS_InfixOP epos AS_EQ
-                                           (mk_AS_Ident $ mkPC pc)
+                                           (mk_Ident' $ mkPC pc)
                                            (AS_Num epos (i+1)))]
                               SH_GuardedInstrList info guard hooks l = gil
                               gil' = SH_GuardedInstrList info guard hooks
@@ -125,14 +125,14 @@ splitGIL pc l =
                  g root last (n,(await, il)) =
                    let SH_I_Await _ handler = await
                        guard = AS_InfixOP epos AS_EQ
-                                 (mk_AS_Ident $ mkPC root)
+                                 (mk_Ident' $ mkPC root)
                                  (AS_Num epos n)
                        [handler'] = predicateWhen guard [handler]
                        nextPC = if n == last then 0 else n + 1
                        upSeq = SH_I_ChangeState upos
                                  [SH_ExprWrapper upos
                                     (AS_InfixOP epos AS_EQ
-                                       (mk_AS_Ident $ mkPC root)
+                                       (mk_Ident' $ mkPC root)
                                        (AS_Num epos nextPC))]
                     in injectIL_H handler' (il ++ [upSeq])
 
@@ -179,14 +179,14 @@ hasAwait = any hasAwait0
 --         f root last (n,(await, il)) =
 --             let SH_I_Await _ handler = await
 --                 guard = AS_InfixOP epos AS_EQ
---                           (mk_AS_Ident $ mkPC root)
+--                           (mk_Ident' $ mkPC root)
 --                           (AS_Num epos n)
 --                 [handler'] = predicateWhen guard [handler]
 --                 nextPC = if n == last then 0 else n + 1
 --                 upSeq = SH_I_ChangeState upos
 --                           [SH_ExprWrapper upos
 --                            (AS_InfixOP epos AS_EQ
---                             (mk_AS_Ident $ mkPC root)
+--                             (mk_Ident' $ mkPC root)
 --                             (AS_Num epos nextPC))]
 --              in injectIL_H handler' (il ++ [upSeq])
 --         test (SH_I_Await _ _) = True
@@ -264,8 +264,8 @@ rewriteRewind spec = everywhere (mkT (f spec)) spec
                in SH_I_ChangeState upos
                       [SH_ExprWrapper upos
                        (AS_InfixOP epos AS_EQ
-                        (mk_AS_Ident $ mkPC id)
-                        (mk_AS_Ident pc))]
+                        (mk_Ident' $ mkPC id)
+                        (mk_Ident' pc))]
           f _ x = x
 
 -- extract the inline STATE declarations from all instruction lists
@@ -282,17 +282,17 @@ extractStates = everything (++) ([] `mkQ` f)
 
 typeDefaultValue :: SH_Type -> AS_Expression
 typeDefaultValue (SH_Ty_UserDef _ s) = typeDefaultValueUserDef s
-typeDefaultValue (SH_Ty_UserDefOrNIL _ _t) = mk_AS_Ident "NIL"
-typeDefaultValue (SH_Ty_Expr _ _t) = mk_AS_Ident "Outsch_need_type_inference"
+typeDefaultValue (SH_Ty_UserDefOrNIL _ _t) = mk_Ident' "NIL"
+typeDefaultValue (SH_Ty_Expr _ _t) = mk_Ident' "Outsch_need_type_inference"
 typeDefaultValue (SH_Ty_SetOf _ _t) = AS_DiscreteSet epos []
 typeDefaultValue (SH_Ty_SeqOf _ _t) = AS_Tuple epos []
 typeDefaultValue (SH_Ty_PairOf _ tA tB) = AS_Tuple epos [ typeDefaultValue tA
                                                         , typeDefaultValue tB ]
 typeDefaultValue (SH_Ty_Map _ tA tB) = AS_QuantifierBoundFunction epos
-                                       [AS_QBoundN [mk_AS_Ident "local_x"]
+                                       [AS_QBoundN [mk_Ident' "local_x"]
                                         (mk_AS_Type tA)]
                                        (typeDefaultValue tB)
-typeDefaultValue (SH_Ty_Enum _ l) = mk_AS_Ident (show $ head l)
+typeDefaultValue (SH_Ty_Enum _ l) = mk_Ident' (show $ head l)
 -- FIXME kramer@acm.org reto -- add SH_Ty_Union support
 typeDefaultValue _ = undefined
 
@@ -303,7 +303,7 @@ typeDefaultValueUserDef "Nat" = AS_Num epos 0
 -- a TLA { TypeDefaultValue("SomeType") == ... }
 -- Work around for lack of type inference, see prim_stateinit
 typeDefaultValueUserDef unknown =
-    AS_OpApp epos (mk_AS_Ident "TypeDefaultValue") [mk_AS_Ident $ show unknown]
+    AS_OpApp epos (mk_Ident' "TypeDefaultValue") [mk_Ident' $ show unknown]
 
 rewriteInlineStates :: [SH_RoleElement] -> [SH_RoleElement]
 rewriteInlineStates = everywhere (mkT f)
@@ -312,7 +312,7 @@ rewriteInlineStates = everywhere (mkT f)
             SH_I_ChangeState upos
               [SH_ExprWrapper upos
                (AS_InfixOP epos AS_EQ
-                (mk_AS_Ident v)
+                (mk_Ident' v)
                 init)]
         f x = x
 
@@ -357,14 +357,13 @@ rewritePCLoc :: SH_FL_Spec -> String -> Maybe SH_ExprWrapper
                     -> Maybe SH_ExprWrapper
 rewritePCLoc _spec _role Nothing = Nothing
 rewritePCLoc spec role guard     = everywhere (mkT (f spec role)) guard
-  where f spec role i@(AS_Ident _ _ name) =
+  where f spec role i@(AS_Ident (AS_Name _ _ name)) =
             case break (=='@') name of
-              (_,[]) -> i -- no @ present
               (root, '@':label) ->
                   AS_InfixOP epos AS_EQ
-                    (mk_AS_Ident $ mkPC root)
-                    (mk_AS_Ident $ idxOfAwaitIn spec role label)
-              _ -> undefined
+                    (mk_Ident' $ mkPC root)
+                    (mk_Ident' $ idxOfAwaitIn spec role label)
+              (_,_) -> i -- no @ present
         f _ _ x = x
 
 rewritePCLocGIL :: SH_FL_Spec -> String -> [SH_GuardedInstrList]
@@ -411,9 +410,6 @@ idxOfAwaitIn spec _role hndlLabel = -- lame error handling, unknown label == -1
         hookEq s (Just l) = any (\(SH_HookCaller _ name _) -> (name == s)) l
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
-
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 

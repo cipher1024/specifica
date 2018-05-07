@@ -185,8 +185,9 @@ cup template roles =
 
 generatedStateFields :: AS_Spec -> [String]
 generatedStateFields tla = nub $ everything (++) ([] `mkQ` f) tla
-  where f (AS_Ident _ _ name) | "g_" `isPrefixOf` name = [name]
-                              | otherwise        = []
+  where f (AS_Ident (AS_Name _ _ name))
+            | "g_" `isPrefixOf` name = [name]
+            | otherwise        = []
         f _ = []
 
 -- FIXME kramer@acm.org reto -- hack
@@ -197,7 +198,7 @@ prettyPrintUnit u = showWidth 79 $ ppUnit u
 
 rewriteAnn :: AS_Expression -> AS_Expression -> AS_UnitDef -> AS_UnitDef
 rewriteAnn colorExpr styleExpr
-           (AS_OperatorDef info h@(AS_OpHead (AS_Ident _ _ "mkMsgRec") _) e) =
+           (AS_OperatorDef info h@(AS_OpHead (AS_Name _ _ "mkMsgRec") _) e) =
     let e' = everywhere (mkT (f (colorExpr,styleExpr))) e
      in AS_OperatorDef info h e'
   where f :: (AS_Expression, AS_Expression) -> AS_Expression -> AS_Expression
@@ -215,9 +216,9 @@ extractColorAnn spec =
                      AS_CaseArm epos
                        (AS_InfixOP epos AS_EQ
                         (AS_InfixOP epos AS_DOT
-                         (mk_AS_Ident "msg")
-                         (mk_AS_Ident "type"))
-                        (mk_AS_Ident $ show mtype))
+                         (mk_Ident' "msg")
+                         (mk_Ident' "type"))
+                        (mk_Ident' $ show mtype))
                        (rewriteNames mtype spec e)
                  )
              allColor
@@ -237,9 +238,9 @@ extractStyleAnn spec =
                      AS_CaseArm epos
                        (AS_InfixOP epos AS_EQ
                         (AS_InfixOP epos AS_DOT
-                         (mk_AS_Ident "msg")
-                         (mk_AS_Ident "type"))
-                        (mk_AS_Ident $ show mtype))
+                         (mk_Ident' "msg")
+                         (mk_Ident' "type"))
+                        (mk_Ident' $ show mtype))
                        (rewriteNames mtype spec e)
                  )
              allStyle
@@ -260,11 +261,11 @@ extractAllDisplaySLs = everything (++) ([] `mkQ` f)
 
 rewriteNames :: String -> SH_FL_Spec -> AS_Expression -> AS_Expression
 rewriteNames mtype spec = everywhere (mkT (f mtype spec))
-  where f mtype spec i@(AS_Ident _ _ s) =
+  where f mtype spec i@(AS_Ident (AS_Name _ _ s)) =
             let fields = allFieldsOfMsg mtype (msgDecl spec)
              in if s `elem` fields
                 then AS_InfixOP epos AS_DOT  -- protect field
-                         (mk_AS_Ident "msg")
+                         (mk_Ident' "msg")
                          i
                 else AS_StringLiteral epos s -- assume it's color or style name
         f _ _ x = x
@@ -283,9 +284,6 @@ defaultStyle :: String
 defaultStyle = "solid"
 
 -----
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
-
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 

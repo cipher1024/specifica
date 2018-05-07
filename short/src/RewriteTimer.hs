@@ -31,7 +31,7 @@ rewriteTimerBoilerplate :: AS_Expression -> SH_FL_Spec -> SH_FL_Spec
 rewriteTimerBoilerplate timeline_init spec =
     let d0 = SH_VerbTLAOp upos dummyI Nothing
                (AS_OperatorDef upos
-                  (AS_OpHead (mk_AS_Ident "Timers") [])
+                  (AS_OpHead (mk_Ident' "Timers") [])
                   (mk_AS_Type -- TLACodeGen, makes it conventient to express ty
                      (SH_Ty_Union upos $
                        concatMap (\r ->
@@ -72,7 +72,7 @@ rewriteTimerBoilerplate timeline_init spec =
             let roles = allRoles spec
              in (concatMap (genTickBranch spec) roles)
                  ++ [SH_GuardedInstrList upos
-                     (Just $ SH_ExprWrapper upos (mk_AS_Ident "OTHER"))
+                     (Just $ SH_ExprWrapper upos (mk_Ident' "OTHER"))
                      Nothing
                      [SH_I_FailTLAClause upos]] -- [] OTHER -> FALSE
         genTickBranch spec role =
@@ -81,22 +81,22 @@ rewriteTimerBoilerplate timeline_init spec =
                       SH_GuardedInstrList upos
                         (Just $ SH_ExprWrapper upos
                            (AS_InfixOP epos AS_EQ
-                             (AS_OpApp epos (mk_AS_Ident "TimerNext")
+                             (AS_OpApp epos (mk_Ident' "TimerNext")
                                 [AS_InfixOP epos AS_DOT
                                  -- FIXME kramer@acm.org reto -- hardcoded st_
-                                   (mk_AS_Ident "st_GLOBAL")
-                                   (mk_AS_Ident "g_timeline")])
+                                   (mk_Ident' "st_GLOBAL")
+                                   (mk_Ident' "g_timeline")])
                              (AS_StringLiteral epos timer)))
                         Nothing
                         [SH_I_ForeignChangeState upos role
-                          (Just $ AS_OpApp epos (mk_AS_Ident "RoleNext")
+                          (Just $ AS_OpApp epos (mk_Ident' "RoleNext")
                                      [AS_InfixOP epos AS_DOT
                                  -- FIXME kramer@acm.org reto -- hardcoded st_
-                                        (mk_AS_Ident "st_GLOBAL")
-                                        (mk_AS_Ident "g_timeline")])
+                                        (mk_Ident' "st_GLOBAL")
+                                        (mk_Ident' "g_timeline")])
                           [SH_ExprWrapper upos
                              (AS_InfixOP epos AS_EQ
-                               (mk_AS_Ident $ enable timer)
+                               (mk_Ident' $ enable timer)
                                (AS_Bool epos True))]])
                     timers
 
@@ -109,7 +109,7 @@ rewriteTimer0 = everywhere (mkT f)
     where f (SH_Timer _ _ name) =
               SH_State upos False
                 (SH_Ty_UserDef upos "BOOLEAN", enable name)
-                (Just (SH_ExprWrapper upos (mk_AS_Ident "FALSE")))
+                (Just (SH_ExprWrapper upos (mk_Ident' "FALSE")))
           f (SH_MsgHandler _ ann role when mtype label any from ginstr) =
               SH_MsgHandler upos ann role when mtype label any from
                 (appendInstr role Nothing ginstr)
@@ -133,42 +133,42 @@ rewriteTimer0 = everywhere (mkT f)
 
 conj :: Maybe SH_ExprWrapper -> String -> Maybe SH_ExprWrapper
 conj Nothing e =
-    Just (SH_ExprWrapper upos (mk_AS_Ident e))
+    Just (SH_ExprWrapper upos (mk_Ident' e))
 conj (Just (SH_ExprWrapper _ a)) e =
-    Just (SH_ExprWrapper upos (AS_LAND epos [a, mk_AS_Ident e]))
+    Just (SH_ExprWrapper upos (AS_LAND epos [a, mk_Ident' e]))
 conj (Just _) _ = undefined
 
 updateSched :: String -> Maybe String -> [(AS_Expression, String)]
             -> [String] -> SH_Instr
 updateSched role name restarted canceled =
     let b = AS_OpApp epos
-                (mk_AS_Ident "TimerRemoveAndSchedule")
+                (mk_Ident' "TimerRemoveAndSchedule")
                 [AS_InfixOP epos AS_DOT
                    -- FIXME kramer@acm.org reto -- hardcoded st_
-                   (mk_AS_Ident "st_GLOBAL")
-                   (mk_AS_Ident "g_timeline"),
+                   (mk_Ident' "st_GLOBAL")
+                   (mk_Ident' "g_timeline"),
                  case name of -- remove current timer that just fired
                    Nothing -> AS_DiscreteSet epos []
                    Just name ->
                      AS_DiscreteSet epos -- {} or singleton
                        [AS_Tuple epos
-                        [mk_AS_Ident role,
+                        [mk_Ident' role,
                          AS_StringLiteral epos name]],
                  AS_DiscreteSet epos -- restarted timers
                     (map ( \ (delta_expr, tname) ->
                              AS_Tuple epos [
                                delta_expr,
                                AS_Tuple epos [
-                                 mk_AS_Ident role,
+                                 mk_Ident' role,
                                  AS_StringLiteral epos tname]])
                          restarted),
                  AS_DiscreteSet epos -- canceled timers
                     (map ( \ tname -> AS_Tuple epos [
-                                        mk_AS_Ident role,
+                                        mk_Ident' role,
                                         AS_StringLiteral epos tname])
                          canceled)]
         a = SH_ExprWrapper upos $
-              AS_InfixOP epos AS_EQ (mk_AS_Ident "g_timeline") b
+              AS_InfixOP epos AS_EQ (mk_Ident' "g_timeline") b
      in SH_I_ForeignChangeState upos "GLOBAL" Nothing [a]
 
 restartedT :: [SH_Instr] -> [(AS_Expression, String)]
@@ -208,8 +208,8 @@ appendInstr0 role name ginstr =
                     Just n -> [SH_I_ChangeState upos
                                 [SH_ExprWrapper upos
                                    (AS_InfixOP epos AS_EQ
-                                     (mk_AS_Ident $ enable n)
-                                     (mk_AS_Ident "FALSE"))]]
+                                     (mk_Ident' $ enable n)
+                                     (mk_Ident' "FALSE"))]]
      in SH_GuardedInstrList info guard label (l ++ instr ++ disable)
 
 rewriteEvery :: SH_FL_Spec -> SH_FL_Spec
@@ -263,11 +263,11 @@ rewriteLinearStutter spec =
       else spec
   where f (SH_RoleDef _ "GLOBAL" vars l) =
             let guard = AS_OpApp epos
-                          (mk_AS_Ident "LinearTimeMaxd")
+                          (mk_Ident' "LinearTimeMaxd")
                           [AS_InfixOP epos AS_DOT
                              -- FIXME kramer@acm.org reto -- hardcoded st_
-                             (mk_AS_Ident "st_GLOBAL")
-                             (mk_AS_Ident "g_timeline")]
+                             (mk_Ident' "st_GLOBAL")
+                             (mk_Ident' "g_timeline")]
                 stutter = SH_CallHandler upos "global"
                             (Just $ SH_ExprWrapper upos guard)
                             "StutterWhenLinearTimeMaxd" [] Nothing []
@@ -307,11 +307,11 @@ genTimelineInit spec =
                     in map (\p -> AS_SetGeneration epos
                                    (AS_Tuple epos [
                                       AS_Num epos 0,
-                                      AS_Tuple epos [mk_AS_Ident (lower r),
+                                      AS_Tuple epos [mk_Ident' (lower r),
                                                      AS_StringLiteral epos p]])
                                    (AS_QBound1
-                                      (mk_AS_Ident (lower r))
-                                      (mk_AS_Ident r)))
+                                      (mk_Ident' (lower r))
+                                      (mk_Ident' r)))
                            (map every periods)
 
 
@@ -338,7 +338,7 @@ timeout s = s ++ "_timeout"
 -- FIXME kramer@acm.org reto -- really I need a counter env to number the
 -- "every generated" timers.
 every :: SH_ExprWrapper -> String
-every (SH_ExprWrapper _ (AS_Ident _ _ s)) = "every_" ++ s
+every (SH_ExprWrapper _ (AS_Ident (AS_Name _ _ s))) = "every_" ++ s
 every (SH_ExprWrapper _ (AS_Num _ i)) = "every_" ++ show i
 every _ = undefined
 
@@ -439,13 +439,9 @@ hasGlobalRole spec = [] /= everything (++) ([] `mkQ` f) spec
           f _ = []
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
 
-mkPos :: String -> Int -> Int -> PPos.SourcePos
-mkPos = newPos
 
 upos :: SourcePos
-upos = mkPos "foo" 0 0
+upos = newPos "foo" 0 0
 epos :: (SourcePos, Maybe a1, Maybe a2)
 epos = (upos, Nothing, Nothing)

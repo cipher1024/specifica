@@ -59,7 +59,7 @@ glueTogether roothandler il =
 glueTogether0 :: String -> SH_Instr -> ([SH_Instr], [SH_RoleElement])
 glueTogether0 roothandler (SH_I_DoMeanwhile _ il handlers) =
     let (labels, il') = labelAwait il
-        e = mkOR (map (\l -> mk_AS_Ident $ roothandler ++ "@" ++ l) labels)
+        e = mkOR (map (\l -> mk_Ident' $ roothandler ++ "@" ++ l) labels)
         handlers' = predicateWhen e handlers
      in (il', handlers')
 glueTogether0 _ i = ([i], [])
@@ -116,9 +116,6 @@ mkOR [a,b] = AS_InfixOP epos AS_OR a b
 mkOR l = AS_LOR epos l
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
-
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 

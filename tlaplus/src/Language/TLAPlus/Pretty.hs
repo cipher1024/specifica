@@ -2,9 +2,10 @@ module Language.TLAPlus.Pretty
   ( prettyPrintAS, ppE, prettyPrintE,
     ppUnit,
     prettyPrintVA, ppVA, prettyPrintVATeX,
-    prettyPrintCFG, ppCFG_Value) where
+    prettyPrintCFG, ppCFG_Value,
+    (<++>)) where
 
-import Prelude hiding ((<$>))
+import Prelude
 import Data.List (find, elemIndex)
 import Data.Map as Map (foldrWithKey)
 import Data.Set as Set (elems)
@@ -12,16 +13,21 @@ import Text.PrettyPrint.Leijen
 
 import Language.TLAPlus.Syntax
 
+infixr 5 <++>
+
+(<++>) :: Doc -> Doc -> Doc
+(<++>) = (Text.PrettyPrint.Leijen.<$>)
+
 prettyPrintAS :: AS_Spec -> String
 prettyPrintAS spec =
   let extends = let AS_ExtendDecl _p l = extendDecl spec in map text l
    in showWidth 500 $ -- 132 $ -- FIXME return to 79
       text "----" <+> text "MODULE" <+> text (name spec) <+> text "----"
-  <$> (if length extends > 0
+  <++> (if length extends > 0
        then text "EXTENDS" <+> align (fillCat $ punctuate comma extends)
        else empty)
-  <$> ppUnitList (unitDef spec)
-  <$> text "===="
+  <++> ppUnitList (unitDef spec)
+  <++> text "===="
   where showWidth :: Int -> Doc -> String
         showWidth w doc = displayS (renderPretty 0.9 w doc) ""
 
@@ -42,21 +48,23 @@ ppUnit (AS_OperatorDef _p (AS_OpHead h l) expr) =
 ppUnit (AS_Assume _p e) = text "ASSUME" </> ppE e
 ppUnit (AS_Theorem _p e) = text "THEOREM" </> ppE e
 ppUnit (AS_ConstantDecl _p l) =
-    text "CONSTANT" </> align(fillCat $ punctuate comma (map ppE l))
+    text "CONSTANT" </> align(fillCat $ punctuate comma (map ppName l))
 ppUnit (AS_VariableDecl _p l) =
-    text "VARIABLE" </> align(fillCat $ punctuate comma (map ppE l))
+    text "VARIABLE" </> align(fillCat $ punctuate comma (map ppName l))
 ppUnit (AS_Separator _p) = text "----"
 
+ppName :: AS_Name -> Doc
+ppName (AS_Name _info quallist name) =
+    let l = map text $ quallist++[name] in cat $ punctuate (text "!") l
 
 ppE :: AS_Expression -> Doc
-ppE (AS_Ident _info quallist name) =
-    let l = map text $ quallist++[name] in cat $ punctuate (text "!") l
+ppE (AS_Ident n) = ppName n
 ppE (AS_FunArgList _info l) = (cat $ punctuate comma (map ppE l)) <//> text "]"
-ppE (AS_OpApp _info e l) =
+ppE (AS_OpApp _info n l) =
     let args = if l == []
                then empty
                else parens( align( cat $ punctuate comma (map (group . ppE) l)))
-     in group (ppE e <//> group args)
+     in group (ppName n <//> group args)
 ppE (AS_FunctionType _info a b) = brackets $ ppE a </> text "->" </> ppE b
 -- hack to make sure that SUBSET (A \X B) is printed with the () in place,
 -- otherwise TLC will complain about ambigious precedence. Note that \X isn't
@@ -69,11 +77,11 @@ ppE p@(AS_InfixOP _loc op a b) =
       else group( protectE p a <+> ppInfixOP op <+> protectE p b )
     where tightop = [AS_DOT, AS_DOTDOT, AS_Plus, AS_Minus, AS_FunApp]
 ppE (AS_Let _info l e) = align((text "LET" <+> align (ppUnitList l))
-                               <$> group (text " IN" <+> align (ppE e)))
+                               <++> group (text " IN" <+> align (ppE e)))
 ppE (AS_IF _info cond a b) =
     align(    text "IF" <+> align (ppE cond)
-              <$> text "THEN" <+> align (ppE a)
-              <$> text "ELSE" <+> align (ppE b))
+              <++> text "THEN" <+> align (ppE a)
+              <++> text "ELSE" <+> align (ppE b))
 ppE (AS_DiscreteSet _info l) = braces $ cat (punctuate comma $ map ppE l)
 ppE (AS_RecordFunction _info l) =
     let l' = map (\(AS_MapTo (AS_Field s) e) ->
@@ -156,27 +164,27 @@ ppE AS_CloseFunApp = text "]"
 -- missing pretty printer support, debug aid
 -- ppE e = text $ "(<?>" ++ (show e) ++ "<?>)"
 
-ppFunctionDef :: AS_Expression -> [AS_QBoundN] -> AS_Expression -> Doc
+ppFunctionDef :: AS_Name-> [AS_QBoundN] -> AS_Expression -> Doc
 ppFunctionDef headexpr qbounds expr =
     let bounds = group (cat $ punctuate comma $ map ppQBoundN qbounds)
-     in     group( ppE headexpr <//> brackets (align bounds) <+> text "==")
+     in     group( ppName headexpr <//> brackets (align bounds) <+> text "==")
         </> group (ppE expr)
 
-ppOperatorDef :: AS_Expression -> [AS_Expression] -> AS_Expression -> Doc
+ppOperatorDef :: AS_Name -> [AS_Expression] -> AS_Expression -> Doc
 ppOperatorDef h l expr =
     let args = if length l > 0
                then parens (cat (punctuate comma (map ppE l)))
                else empty
-     in     group (ppE h <//> args <+> text "==")
-        <$> indent 2 (align (group (ppE expr)))
+     in     group (ppName h <//> args <+> text "==")
+        <++> indent 2 (align (group (ppE expr)))
 
 ppQBoundN :: AS_QBoundN -> Doc
 ppQBoundN (AS_QBoundN vars expr) =
-    cat (punctuate comma (map ppE vars)) </> text "\\in" </> ppE expr
+    cat (punctuate comma (map ppName vars)) </> text "\\in" </> ppE expr
 
 ppQBound1 :: AS_QBound1 -> Doc
 ppQBound1 (AS_QBound1 var expr) =
-    ppE var <+> text "\\in" </> ppE expr
+    ppName var <+> text "\\in" </> ppE expr
 
 ppPrefixOP :: AS_PrefixOp -> Doc
 ppPrefixOP AS_SUBSET     = text "SUBSET" <//> space
@@ -453,17 +461,17 @@ prettyPrintCFG v =
         showWidth w doc = displayS (renderPretty 0.9 w doc) ""
 
 ppCFG_Config :: CFG_Config -> Doc
-ppCFG_Config (CFG_Config (Just n) l) = text "SPECIFICATION" <+> text n <$>
+ppCFG_Config (CFG_Config (Just n) l) = text "SPECIFICATION" <+> text n <++>
                                        vcat (map ppCFG_Statement l)
 ppCFG_Config (CFG_Config Nothing l)  = vcat (map ppCFG_Statement l)
 
 ppCFG_Statement :: CFG_Statement -> Doc
 ppCFG_Statement (CFG_ConstantDef _info l) =
-    nest 4 (text "CONSTANT" <$> vcat (map ppCFG_ConstantEntry l))
+    nest 4 (text "CONSTANT" <++> vcat (map ppCFG_ConstantEntry l))
 ppCFG_Statement (CFG_Invariant _info l) =
-    nest 4 (text "INVARIANT" <$> vcat (map ppCFG_Ident l))
+    nest 4 (text "INVARIANT" <++> vcat (map ppCFG_Ident l))
 ppCFG_Statement (CFG_Property _info l) =
-    nest 4 (text "PROPERTY" <$> vcat (map ppCFG_Ident l))
+    nest 4 (text "PROPERTY" <++> vcat (map ppCFG_Ident l))
 ppCFG_Statement (CFG_Symmetry _info i) =
     text "SYMMETRY" <+> ppCFG_Ident i
 ppCFG_Statement (CFG_View _info i) =

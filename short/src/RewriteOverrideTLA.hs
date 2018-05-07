@@ -16,7 +16,7 @@ substTLA :: SH_FL_Spec -> SH_FL_Spec
 substTLA spec = fixP (everywhere (mkT f)) spec
     where f t@(SH_VerbTLAOp _ homeInteraction Nothing tla) =
               let (AS_OperatorDef _
-                    (AS_OpHead (AS_Ident _ _ defname) args)
+                    (AS_OpHead (AS_Name _ _ defname) args)
                     _oldexpr) = tla
                   override = findOverride spec (homeInteraction, defname)
                in if override == []
@@ -24,7 +24,7 @@ substTLA spec = fixP (everywhere (mkT f)) spec
                   else let (i,oexpr) = head override -- head safe
                         in SH_VerbTLAOp upos i Nothing
                              (AS_OperatorDef upos
-                               (AS_OpHead (mk_AS_Ident defname) args)
+                               (AS_OpHead (mk_Ident' defname) args)
                                oexpr)
           f x = x
           fixP f x = if f x == x then x else fixP f (f x)
@@ -33,7 +33,7 @@ findOverride :: SH_FL_Spec -> (String,String) -> [(String, AS_Expression)]
 findOverride spec (i, defname) = everything (++) ([] `mkQ` f defname) spec
     where f defname (SH_VerbTLAOp _ homeInteraction (Just oI) tla)
               | i `elem` oI = let (AS_OperatorDef _
-                                     (AS_OpHead (AS_Ident _ _ odefname) _args)
+                                     (AS_OpHead (AS_Name _ _ odefname) _args)
                                      newexpr) = tla
                                in if defname == odefname
                                   then [(homeInteraction, newexpr)]
@@ -52,13 +52,9 @@ dropOverrideTLA0 = filter (not . isOverrideTLA)
         isOverrideTLA _ = False
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 
 upos :: SourcePos
 upos = mkPos "foo" 0 0
-epos :: (SourcePos, Maybe a1, Maybe a2)
-epos = (upos, Nothing, Nothing)

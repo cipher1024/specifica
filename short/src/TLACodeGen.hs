@@ -80,7 +80,7 @@ extractTLAStateDecl msgDecl r@(SH_RoleDef _info role _args _l) =
              map (\s -> TLA_Constant s) (rs ++ (viewStateTypes r)),
              [TLA_AS_Wrapper
                (AS_OperatorDef upos
-                (AS_OpHead (mk_AS_Ident ty) [])
+                (AS_OpHead (mk_Ident' ty) [])
                 (AS_RecordType epos $ map mk_AS_RecordTypeElement
                  (vardecl $ stateRec msgDecl r)))],
              [if role == globalRole
@@ -102,8 +102,8 @@ initdecl role l =
     then SH_ExprWrapper upos (AS_RecordFunction epos (concat $ map mapsTo l))
     else SH_ExprWrapper upos
                   (AS_QuantifierBoundFunction epos
-                   [AS_QBoundN [mk_AS_Ident $ lower role]
-                    (mk_AS_Ident role)]
+                   [AS_QBoundN [mk_Ident' $ lower role]
+                    (mk_Ident' role)]
                    (AS_RecordFunction epos (concat $ map mapsTo l)))
   where mapsTo ((_,i), Just (SH_ExprWrapper _ init)) =
             [AS_MapTo (AS_Field i) init]
@@ -126,7 +126,7 @@ stateRec msgDecl (SH_RoleDef _info role _args l) =
                    (SH_Ty_UserDef upos "Msg")
                    (SH_Ty_Expr upos
                       (combineInfix AS_Cup $
-                         map (AS_PrefixOP epos AS_SUBSET . mk_AS_Ident)
+                         map (AS_PrefixOP epos AS_SUBSET . mk_Ident')
                              (destRoles msgDecl role)))),
                "g_obuf"),
                Just $ SH_ExprWrapper upos (AS_Tuple epos [])
@@ -192,16 +192,16 @@ defUseOrderTLA l = foldl' g [] l
         defUse a b | a == b = EQ
         defUse (SH_VerbTLAOp _ _ _ a) (SH_VerbTLAOp _ _ _ b) =
           case a of
-            (AS_OperatorDef _ (AS_OpHead (AS_Ident _ [] name) _) _) ->
+            (AS_OperatorDef _ (AS_OpHead (AS_Name _ [] name) _) _) ->
                if name `usedIn` b then LT else GT
-            (AS_FunctionDef _ (AS_Ident _ [] name) _ _) ->
+            (AS_FunctionDef _ (AS_Name _ [] name) _ _) ->
                if name `usedIn` b then LT else GT
             _ -> trace (" >> " ++ show a ++ " <<") GT
         defUse _ _ = GT
         usedIn :: String -> AS_UnitDef -> Bool
         usedIn name unit =
             [] /= (everything (++) ([] `mkQ` (f name unit))) unit
-        f a _u (AS_Ident _ [] b) =
+        f a _u (AS_Ident (AS_Name _ [] b)) =
             if a == b
             then [True]
             else []
@@ -318,8 +318,8 @@ mkCallHandler ctx protect role when label arglist gillist =
     let rs = if role == globalRole then [] else [(role, lower role)]
      in AS_OperatorDef upos
           (AS_OpHead
-             (mk_AS_Ident $ mkActionName label when gillist)
-             (map ( \ (_,b) -> mk_AS_Ident b) (rs++arglist)))
+             (mk_Ident' $ mkActionName label when gillist)
+             (map (mk_Ident' . snd) (rs++arglist)))
           (AS_LAND epos $ ((mkWhen protect role when) ++
                            [mkCase ctx protect role gillist []]))
 
@@ -330,37 +330,37 @@ mkMsgHandler :: Ctx -> [HandlerAnnotation] -> [String] -> String -> Maybe SH_Exp
 mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
   let inbox = AS_InfixOP epos AS_DOT
                   (AS_InfixOP epos AS_FunApp
-                     (mk_AS_Ident $ mkVar role)
-                     (AS_FunArgList epos [mk_AS_Ident $ lower role]))
-                  (mk_AS_Ident "g_inbox")
+                     (mk_Ident' $ mkVar role)
+                     (AS_FunArgList epos [mk_Ident' $ lower role]))
+                  (mk_Ident' "g_inbox")
       -- chkType = [(AS_InfixOP epos AS_EQ
       --             (AS_InfixOP epos AS_DOT
-      --              (AS_OpApp epos (mk_AS_Ident "Head") [inbox])
-      --              (mk_AS_Ident "type"))
-      --             (mk_AS_Ident $ show msgtype))]
-      msgpos_e_sr = AS_OpApp epos (mk_AS_Ident "MsgPos")
+      --              (AS_OpApp epos (mk_Ident' "Head") [inbox])
+      --              (mk_Ident' "type"))
+      --             (mk_Ident' $ show msgtype))]
+      msgpos_e_sr = AS_OpApp epos (mk_Ident' "MsgPos")
                      [inbox,
                       AS_StringLiteral epos msgtype,
-                      mk_AS_Ident "Local_F",
-                      mk_AS_Ident $ lower role]
+                      mk_Ident' "Local_F",
+                      mk_Ident' $ lower role]
       -- IF Head(inbox).type = msgtype THEN 1 ELSE 0
       msgpos_e_reg = AS_IF epos
                        (AS_InfixOP epos AS_EQ
                          (AS_InfixOP epos AS_DOT
-                           (AS_OpApp epos (mk_AS_Ident "Head") [inbox])
-                           (mk_AS_Ident "type"))
+                           (AS_OpApp epos (mk_Ident' "Head") [inbox])
+                           (mk_Ident' "type"))
                          (AS_StringLiteral epos msgtype))
                        (AS_Num epos 1) -- head matches type
                        (AS_Num epos 0) -- no match
       msgpos_e = if annSelectiveReceive ann then msgpos_e_sr else msgpos_e_reg
       inbox_p = AS_InfixOP epos AS_FunApp
                   inbox
-                  (AS_FunArgList epos [mk_AS_Ident "local_p"])
-      inbox_DropPos = AS_OpApp epos (mk_AS_Ident "DropPos")
-                        [inbox, mk_AS_Ident "local_p"]
+                  (AS_FunArgList epos [mk_Ident' "local_p"])
+      inbox_DropPos = AS_OpApp epos (mk_Ident' "DropPos")
+                        [inbox, mk_Ident' "local_p"]
       core_e = (mkCase ctx protect role gillist
                   [TLA_I_Change
-                   role [mk_AS_Ident $ lower role] "g_inbox" inbox_DropPos])
+                   role [mk_Ident' $ lower role] "g_inbox" inbox_DropPos])
       core_e' = defuseAssert core_e
       precond' = case core_e' of
                    (AS_Case _ pcond _) ->
@@ -373,19 +373,19 @@ mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
                        dropAssertPrimeUnchanged e -- a big LAND, but no case
       precondOp = AS_OperatorDef upos
                     (AS_OpHead
-                      (mk_AS_Ident "Local_F")
-                      [mk_AS_Ident $ local(lower role), mk_AS_Ident msgtype])
+                      (mk_Ident' "Local_F")
+                      [mk_Ident' $ local(lower role), mk_Ident' msgtype])
                     (substAS_Expr [(lower role, local $ lower role)] precond')
       actions = filter
                   (\(name, _) -> name /= mkActionName msgtype when gillist)
                   (msgH True {- incl. multi-handlers -} ctx Nothing role)
       enabled_e_sr = AS_Quantified epos AS_All
                        [AS_QBoundN
-                         [mk_AS_Ident "local_i"]
+                         [mk_Ident' "local_i"]
                            (AS_InfixOP epos AS_DOTDOT
                              (AS_Num epos 1)
                              (AS_InfixOP epos AS_Minus
-                               (mk_AS_Ident "local_p")
+                               (mk_Ident' "local_p")
                                (AS_Num epos 1)))]
                     (if actions == []
                      then AS_Bool epos True
@@ -396,35 +396,35 @@ mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
                   else enabled_e_reg
    in AS_OperatorDef upos
         (AS_OpHead
-         (mk_AS_Ident $ xify (mkActionName msgtype when gillist))
-         (map ( \ (_,b) -> mk_AS_Ident b) ([(role, lower role),
+         (mk_Ident' $ xify (mkActionName msgtype when gillist))
+         (map (mk_Ident' . snd) ([(role, lower role),
                                             ("_dummyNatType", "msgpos")])))
         (AS_LAND epos $ ((mkWhen protect role when) ++ (concat
                          [[(AS_InfixOP epos AS_GT
-                            (AS_OpApp epos (mk_AS_Ident "Len") [inbox])
+                            (AS_OpApp epos (mk_Ident' "Len") [inbox])
                             (AS_Num epos 0))],
                           [AS_Let epos
                              ((bindAllMsgSetRef [msgtype]
                                inbox gillist Nothing) ++
                              [precondOp] ++
                              [AS_OperatorDef upos
-                              (AS_OpHead (mk_AS_Ident "local_p") []) msgpos_e])
+                              (AS_OpHead (mk_Ident' "local_p") []) msgpos_e])
                               -- under LET m == .. scope
                               (AS_LAND epos [
                                  (AS_InfixOP epos AS_GT
-                                    (mk_AS_Ident "local_p")
+                                    (mk_Ident' "local_p")
                                     (AS_Num epos 0) ),
                                  (AS_IF epos
                                    (AS_InfixOP epos AS_EQ
-                                     (mk_AS_Ident "msgpos")
+                                     (mk_Ident' "msgpos")
                                      (AS_Num epos 0))
                                    enabled_e
                                    (AS_InfixOP epos AS_EQ
-                                    (mk_AS_Ident "local_p")
-                                    (mk_AS_Ident "msgpos"))),
+                                    (mk_Ident' "local_p")
+                                    (mk_Ident' "msgpos"))),
                                  (AS_Let epos
                                     [AS_OperatorDef upos
-                                       (AS_OpHead (mk_AS_Ident msgtype) [])
+                                       (AS_OpHead (mk_Ident' msgtype) [])
                                        inbox_p]
                                     core_e')
                                  ])]])))
@@ -432,21 +432,21 @@ mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
         mkEnabled (actionName, _argl) =
              -- last argl element is "msgpos", drop and use local_i
              AS_PrefixOP epos AS_Not
-                    (AS_OpApp epos (mk_AS_Ident "ENABLED")
-                      [AS_OpApp epos (mk_AS_Ident actionName)
-                        [mk_AS_Ident $ lower role,
-                         mk_AS_Ident "local_i"]])
+                    (AS_OpApp epos (mk_Ident' "ENABLED")
+                      [AS_OpApp epos (mk_Ident' actionName)
+                        [mk_Ident' $ lower role,
+                         mk_Ident' "local_i"]])
         local s = "local_" ++ s
         -- when an action is "invoked" inside an ENABLE check, the
         -- assertion it might contain will fire. Disable this by
         -- or-ing (msgpos # 0) with the assertion expression
         defuseAssert :: AS_Expression -> AS_Expression
         defuseAssert e = everywhere (mkT f) e
-          where f (AS_OpApp _ (AS_Ident _ _ "Assert") (cond:rest)) =
-                      AS_OpApp epos (mk_AS_Ident "Assert")
+          where f (AS_OpApp _ (AS_Name _ _ "Assert") (cond:rest)) =
+                      AS_OpApp epos (mk_Ident' "Assert")
                                  ((AS_LOR epos
                                    [AS_InfixOP epos AS_NEQ
-                                      (mk_AS_Ident "msgpos")
+                                      (mk_Ident' "msgpos")
                                       (AS_Num epos 0),
                                     cond]
                                   ):rest)
@@ -456,7 +456,7 @@ mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
                     AS_Bool epos True
                 f (AS_PrefixOP _ AS_UNCHANGED _) =
                     AS_Bool epos True
-                f (AS_OpApp _ (AS_Ident _ _ "Assert") _) =
+                f (AS_OpApp _ (AS_Name _ _ "Assert") _) =
                     AS_Bool epos True
                 f x = x
 -- mkMsgHandler _ctx _ann _protect _role _when _msgtype _label _any _from _gillist = undefined
@@ -465,36 +465,36 @@ mkMsgHandler ctx ann protect role when msgtype _label _any Nothing gillist =
 mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist =
   let inbox = AS_InfixOP epos AS_DOT
                   (AS_InfixOP epos AS_FunApp
-                     (mk_AS_Ident $ mkVar role)
-                     (AS_FunArgList epos [mk_AS_Ident $ lower role]))
-                  (mk_AS_Ident "g_inbox")
+                     (mk_Ident' $ mkVar role)
+                     (AS_FunArgList epos [mk_Ident' $ lower role]))
+                  (mk_Ident' "g_inbox")
       senderType = case from of
                      (SH_FromAll s, _w) -> s
                      (SH_FromMaj s, _w) -> s
                      (SH_FromExp s _e, _w) -> s
       view = AS_InfixOP epos AS_DOT
                   (AS_InfixOP epos AS_FunApp
-                     (mk_AS_Ident $ mkVar role)
-                     (AS_FunArgList epos [mk_AS_Ident $ lower role]))
-                  (mk_AS_Ident $ mkView senderType)
+                     (mk_Ident' $ mkVar role)
+                     (AS_FunArgList epos [mk_Ident' $ lower role]))
+                  (mk_Ident' $ mkView senderType)
       setPred = case from of
                 (SH_FromAll _, _) ->
                     (AS_LAND epos
                       [AS_InfixOP epos AS_EQ -- ALL
-                         (mk_AS_Ident "sender_set")
+                         (mk_Ident' "sender_set")
                          view,
                        AS_InfixOP epos AS_NEQ -- don't trigger on empty view {}
                          (AS_DiscreteSet epos [])
                          view])
                 (SH_FromExp _t (SH_ExprWrapper _ expr), _) ->
                     (AS_InfixOP epos AS_EQ -- ALL
-                       (mk_AS_Ident "sender_set")
+                       (mk_Ident' "sender_set")
                        (rewriteExpr protect role expr)) -- custom expr
                 (SH_FromMaj _, _) ->
                     AS_LAND epos
                       [AS_OpApp epos
-                        (mk_AS_Ident "Majority")
-                         [mk_AS_Ident "sender_set",
+                        (mk_Ident' "Majority")
+                         [mk_Ident' "sender_set",
                           view], -- MAJORITY
                        AS_InfixOP epos AS_NEQ -- don't trigger on empty view {}
                          (AS_DiscreteSet epos [])
@@ -511,8 +511,8 @@ mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist 
                                      SH_Some -> AS_Exist
                                      SH_None -> AS_All)
                                   [AS_QBoundN
-                                    [mk_AS_Ident "temp_m"]
-                                    (mk_AS_Ident msgtype)]
+                                    [mk_Ident' "temp_m"]
+                                    (mk_Ident' msgtype)]
                                   kernel
                          in [e]
                     _ ->
@@ -523,10 +523,10 @@ mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist 
                   (msgH False ctx Nothing {- match all msg types -} role)
       enabled_e = AS_Quantified epos AS_All
                     [AS_QBoundN
-                       [mk_AS_Ident "local_i"]
+                       [mk_Ident' "local_i"]
                        (AS_InfixOP epos AS_DOTDOT
                           (AS_Num epos 1)
-                          (mk_AS_Ident "maxi"))]
+                          (mk_Ident' "maxi"))]
                     (if actions == []
                      then AS_Bool epos True
                      else (AS_LAND epos $ map mkEnabled actions))
@@ -534,51 +534,51 @@ mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist 
                    wherePred ++ [
                   (mkCase ctx protect role gillist
                    [TLA_I_Change
-                    role [mk_AS_Ident $ lower role] "g_inbox"
-                    (AS_OpApp epos (mk_AS_Ident "SelectSeq")
+                    role [mk_Ident' $ lower role] "g_inbox"
+                    (AS_OpApp epos (mk_Ident' "SelectSeq")
                      [inbox,
-                      mk_AS_Ident "KeepMsgTest"])])
+                      mk_Ident' "KeepMsgTest"])])
                   ]
       regular_e' = AS_IF epos
                      (AS_InfixOP epos AS_EQ
-                       (mk_AS_Ident "msgpos")
+                       (mk_Ident' "msgpos")
                        (AS_Num epos 0))
                      (AS_LAND epos regular_e)
                      (AS_InfixOP epos AS_AND
                        (AS_InfixOP epos AS_NEQ
-                         (mk_AS_Ident "maxi")
+                         (mk_Ident' "maxi")
                          (AS_Num epos 0))
                        (AS_InfixOP epos AS_LTEQ
-                         (mk_AS_Ident "maxi")
-                         (mk_AS_Ident "msgpos")))
+                         (mk_Ident' "maxi")
+                         (mk_Ident' "msgpos")))
    in AS_OperatorDef upos
         (AS_OpHead
-         (mk_AS_Ident $ xify (mkActionName msgtype when gillist))
-         (map ( \ (_,b) -> mk_AS_Ident b) ([(role, lower role),
+         (mk_Ident' $ xify (mkActionName msgtype when gillist))
+         (map ( \ (_,b) -> mk_Ident' b) ([(role, lower role),
                                             ("_dummyNatType", "msgpos")])))
         (AS_LAND epos $ ((mkWhen protect role when) ++
                          [(AS_InfixOP epos AS_GT
-                           (AS_OpApp epos (mk_AS_Ident "Len") [inbox])
+                           (AS_OpApp epos (mk_Ident' "Len") [inbox])
                            (AS_Num epos 0)),
                           (AS_Let epos
                            ((bindAllMsgSetRef [msgtype]
                                inbox gillist (Just view)) ++
                             (mkMTypeLet msgtype inbox (Just view)) ++
                             [AS_OperatorDef upos
-                              (AS_OpHead (mk_AS_Ident "sender_set") [])
+                              (AS_OpHead (mk_Ident' "sender_set") [])
                               (AS_SetGeneration epos
                                  (AS_InfixOP epos AS_DOT
-                                   (mk_AS_Ident "m")
-                                   (mk_AS_Ident "sender"))
+                                   (mk_Ident' "m")
+                                   (mk_Ident' "sender"))
                                  (AS_QBound1
-                                   (mk_AS_Ident "m")
-                                   (mk_AS_Ident msgtype))),
+                                   (mk_Ident' "m")
+                                   (mk_Ident' msgtype))),
                              AS_OperatorDef upos
-                              (AS_OpHead (mk_AS_Ident "KeepMsgTest")
-                                 [mk_AS_Ident "m"])
+                              (AS_OpHead (mk_Ident' "KeepMsgTest")
+                                 [mk_Ident' "m"])
                                  (AS_InfixOP epos AS_NotIn
-                                   (mk_AS_Ident "m")
-                                   (mk_AS_Ident msgtype))])
+                                   (mk_Ident' "m")
+                                   (mk_Ident' msgtype))])
                            -- under LET m == .. scope
                            (AS_LAND epos (
                             [setPred] ++
@@ -588,10 +588,10 @@ mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist 
         mkEnabled (actionName, _argl) =
              -- last argl element is "msgpos", drop and use local_i
              AS_PrefixOP epos AS_Not
-                    (AS_OpApp epos (mk_AS_Ident "ENABLED")
-                      [AS_OpApp epos (mk_AS_Ident actionName)
-                        [mk_AS_Ident $ lower role,
-                         mk_AS_Ident "local_i"]])
+                    (AS_OpApp epos (mk_Ident' "ENABLED")
+                      [AS_OpApp epos (mk_Ident' actionName)
+                        [mk_Ident' $ lower role,
+                         mk_Ident' "local_i"]])
 -- mkMsgHandler _ctx _ann _protect _role _when _msgtype _label _any _ _gillist = undefined
 {-
   /\ (LET res ==
@@ -606,21 +606,21 @@ mkMsgHandler ctx _ann protect role when msgtype _label _any (Just from) gillist 
 mkMTypeLet :: String -> AS_Expression -> Maybe AS_Expression -> [AS_UnitDef]
 mkMTypeLet msgtype inbox view =
     let is = AS_OperatorDef upos
-               (AS_OpHead (mk_AS_Ident "is") [])
+               (AS_OpHead (mk_Ident' "is") [])
                (AS_SetComprehension epos
                   (AS_QBound1
-                     (mk_AS_Ident "local_i")
+                     (mk_Ident' "local_i")
                      (AS_OpApp epos
-                        (mk_AS_Ident "DOMAIN")
+                        (mk_Ident' "DOMAIN")
                         [inbox]))
                   (AS_LAND epos
                      ([AS_InfixOP epos AS_EQ
                         (AS_InfixOP epos AS_DOT
                             (AS_InfixOP epos AS_FunApp
                             inbox
-                            (AS_FunArgList epos [mk_AS_Ident "local_i"]))
-                          (mk_AS_Ident "type"))
-                        (mk_AS_Ident $ show msgtype)] ++
+                            (AS_FunArgList epos [mk_Ident' "local_i"]))
+                          (mk_Ident' "type"))
+                        (mk_Ident' $ show msgtype)] ++
                       (case view of
                         Nothing -> []
                         (Just view) ->
@@ -628,38 +628,38 @@ mkMTypeLet msgtype inbox view =
                              (AS_InfixOP epos AS_DOT
                                   (AS_InfixOP epos AS_FunApp
                                   inbox
-                                  (AS_FunArgList epos [mk_AS_Ident "local_i"]))
-                                (mk_AS_Ident "sender"))
+                                  (AS_FunArgList epos [mk_Ident' "local_i"]))
+                                (mk_Ident' "sender"))
                              view]))))
         maxi = AS_OperatorDef upos
-                 (AS_OpHead (mk_AS_Ident "maxi") [])
+                 (AS_OpHead (mk_Ident' "maxi") [])
                  (AS_IF epos
                    (AS_InfixOP epos AS_NEQ
-                      (mk_AS_Ident "is")
+                      (mk_Ident' "is")
                       (AS_DiscreteSet epos []))
                        (AS_Choose epos
                       (AS_QBound1
-                       (mk_AS_Ident "local_i")
-                       (mk_AS_Ident "is"))
+                       (mk_Ident' "local_i")
+                       (mk_Ident' "is"))
                       (AS_Quantified epos AS_All
-                       [AS_QBoundN [mk_AS_Ident "local_j"] (mk_AS_Ident "is")]
+                       [AS_QBoundN [mk_Ident' "local_j"] (mk_Ident' "is")]
                        (AS_InfixOP epos AS_LTEQ
-                        (mk_AS_Ident "local_j")
-                        (mk_AS_Ident "local_i"))))
+                        (mk_Ident' "local_j")
+                        (mk_Ident' "local_i"))))
                    (AS_Num epos 0))
         msgs = AS_OperatorDef upos
-                 (AS_OpHead (mk_AS_Ident msgtype) [])
+                 (AS_OpHead (mk_Ident' msgtype) [])
                  (AS_SetGeneration epos
                      (AS_InfixOP epos AS_FunApp
                       inbox
-                      (AS_FunArgList epos [mk_AS_Ident "local_i"]))
-                   (AS_QBound1 (mk_AS_Ident "local_i")
-                     (mk_AS_Ident "is")))
+                      (AS_FunArgList epos [mk_Ident' "local_i"]))
+                   (AS_QBound1 (mk_Ident' "local_i")
+                     (mk_Ident' "is")))
      in [is, maxi, msgs]
 
 findAllMsgSetRef :: [String] -> [SH_GuardedInstrList] -> [String]
 findAllMsgSetRef cov gil = (nub $ (everything (++) ([] `mkQ` f)) gil) \\ cov
-  where f (AS_OpApp _ (AS_Ident _ _ f) [AS_Ident _ _ mtype])
+  where f (AS_OpApp _ (AS_Name _ _ f) [AS_Ident (AS_Name _ _ mtype)])
             | elem (lower f) ["all", "any", "any2", "senders"] = [mtype]
             | otherwise = []
         f _ = []
@@ -684,12 +684,12 @@ mkCase ctx protect role gillist inheritedChgs =
                                (SH_GuardedInstrList _
                                     (Just (SH_ExprWrapper _ e)) _ _) ->
                                   case e of
-                                    AS_Ident _ _ "otherwise" ->
+                                    AS_Ident (AS_Name _ _ "otherwise") ->
                                          (butLast,
                                        Just $ mkCaseArmOther
                                                 ctx protect role inheritedChgs
                                                 other)
-                                    AS_LAND _ [AS_Ident _ _ "otherwise"] ->
+                                    AS_LAND _ [AS_Ident (AS_Name _ _ "otherwise")] ->
                                          (butLast,
                                        Just $ mkCaseArmOther
                                                 ctx protect role inheritedChgs
@@ -755,7 +755,7 @@ mkTLAInstr _ctx protect role (SH_I_ChangeView _ viewedRole
     concat $ map (mkExceptAssignment protect Nothing role)
                [SH_ExprWrapper upos
                 (AS_InfixOP epos AS_EQ
-                 (AS_Ident epos [] $ mkView viewedRole)
+                 (mk_Ident epos [] $ mkView viewedRole)
                  e)]
 mkTLAInstr ctx protect role (SH_I_SendGroup _ l) =
   case l of
@@ -776,8 +776,8 @@ mkTLAInstr ctx protect role (SH_I_MsgSend1 _ _ multi last dest mtype pairs) =
                          let e' = rewriteExpr protect role e in
                              AS_MapTo (AS_Field s) e') pairs
         msg = AS_RecordFunction epos
-                ([AS_MapTo (AS_Field "type") (mk_AS_Ident $ show mtype), -- ""
-                  AS_MapTo (AS_Field "sender") (mk_AS_Ident $ lower role)
+                ([AS_MapTo (AS_Field "type") (mk_Ident' $ show mtype), -- ""
+                  AS_MapTo (AS_Field "sender") (mk_Ident' $ lower role)
                  ] ++ args')
         destrole = case dest of
                      (SH_VIEW_REF _ s) -> s
@@ -789,10 +789,10 @@ mkTLAInstr ctx protect role (SH_I_MsgSend1 _ _ multi last dest mtype pairs) =
                             (SH_VIEW_REF _ _s) ->
                               ((AS_InfixOP epos AS_DOT
                                 (AS_InfixOP epos AS_FunApp
-                                 (mk_AS_Ident $ mkVar role)
-                                 (AS_FunArgList epos [mk_AS_Ident $
+                                 (mk_Ident' $ mkVar role)
+                                 (AS_FunArgList epos [mk_Ident' $
                                                       lower role]))
-                                (mk_AS_Ident $ mkView destrole))
+                                (mk_Ident' $ mkView destrole))
                               ,"g_inbox")
                             (SH_ExprWrapper _ e) ->
                                 (e, "g_inbox")
@@ -801,9 +801,9 @@ mkTLAInstr ctx protect role (SH_I_MsgSend1 _ _ multi last dest mtype pairs) =
                else msg
         newv = if last -- last message from sender (before crash?)
                then AS_Tuple epos [msg']
-               else AS_OpApp epos (mk_AS_Ident "Append") [AS_OldVal, msg']
+               else AS_OpApp epos (mk_Ident' "Append") [AS_OldVal, msg']
      in if multi
-        then [TLA_I_Change role     [mk_AS_Ident $ lower role] "g_obuf" newv]
+        then [TLA_I_Change role     [mk_Ident' $ lower role] "g_obuf" newv]
         else [TLA_I_Change destrole [navapp]                   field  newv]
 mkTLAInstr _ctx protect role (SH_I_Assert _ (SH_ExprWrapper _ e) s l) =
     let l' = case l of
@@ -830,11 +830,11 @@ tlaSend ctx protect role l =
       newv = if length l == 1
              then if hasLastGasp
                   then AS_Tuple epos els -- not els is singleton
-                  else AS_OpApp epos (mk_AS_Ident "Append") [AS_OldVal, head els]
+                  else AS_OpApp epos (mk_Ident' "Append") [AS_OldVal, head els]
              else if hasLastGasp
                   then AS_Tuple epos els -- reset queue!
                   else AS_InfixOP epos AS_Circ AS_OldVal (AS_Tuple epos els)
-   in [TLA_I_Change role [mk_AS_Ident $ lower role] "g_obuf" newv]
+   in [TLA_I_Change role [mk_Ident' $ lower role] "g_obuf" newv]
   where
     mkQEntry ctx protect role (SH_I_MsgSend1 _ _ multi _last dest mtype pairs) =
       let args' = map (\(s,SH_ExprWrapper _ e) ->
@@ -842,8 +842,8 @@ tlaSend ctx protect role l =
                           let e' = rewriteExpr protect role e in
                               AS_MapTo (AS_Field s) e') pairs
           msg = AS_RecordFunction epos
-                 ([AS_MapTo (AS_Field "type") (mk_AS_Ident $ show mtype), -- ""
-                   AS_MapTo (AS_Field "sender") (mk_AS_Ident $ lower role)
+                 ([AS_MapTo (AS_Field "type") (mk_Ident' $ show mtype), -- ""
+                   AS_MapTo (AS_Field "sender") (mk_Ident' $ lower role)
                  ] ++ args')
           destrole = case dest of
                        (SH_VIEW_REF _ s) -> s
@@ -855,10 +855,10 @@ tlaSend ctx protect role l =
                      (SH_VIEW_REF _ _s) ->
                          (AS_InfixOP epos AS_DOT
                              (AS_InfixOP epos AS_FunApp
-                              (mk_AS_Ident $ mkVar role)
-                              (AS_FunArgList epos [mk_AS_Ident $
+                              (mk_Ident' $ mkVar role)
+                              (AS_FunArgList epos [mk_Ident' $
                                                      lower role]))
-                           (mk_AS_Ident $ mkView destrole))
+                           (mk_Ident' $ mkView destrole))
                      (SH_ExprWrapper _ e) ->
                          if multi then e else AS_DiscreteSet epos [e]
        in AS_Tuple epos [msg, navapp]
@@ -876,11 +876,11 @@ mkTLAInstrMsgDef (l,_) ty =
 -- Straight case where assignment is to variable
 mkExceptAssignment :: Foldable t => t String -> Maybe AS_Expression -> String -> SH_ExprWrapper -> [TLA_I_Change]
 mkExceptAssignment protect var role (SH_ExprWrapper _ (AS_InfixOP _ AS_EQ
-                                                       (AS_Ident _ _ s) e)) =
+                                                       (AS_Ident (AS_Name _ _ s)) e)) =
     let rs = if role == globalRole
              then []
              else case var of
-                    Nothing -> [mk_AS_Ident $ lower role]
+                    Nothing -> [mk_Ident' $ lower role]
                     (Just nav) -> [nav]
      in [TLA_I_Change role rs s (rewriteExpr protect role e) ]
 -- FIXME kramer@acm.org reto -- ADD SUPPORT FOR "GLOBAL" and "var" here also!
@@ -890,9 +890,9 @@ mkExceptAssignment protect var role (SH_ExprWrapper _ (AS_InfixOP _ AS_EQ
 mkExceptAssignment protect _var role (SH_ExprWrapper _
                                      (AS_InfixOP _ AS_EQ
                                       (AS_InfixOP _ AS_FunApp
-                                       (AS_Ident _ _ s)
+                                       (AS_Ident (AS_Name _ _ s))
                                        (AS_FunArgList _ idx)) e)) =
-    [TLA_I_Change role [mk_AS_Ident $ lower role] s
+    [TLA_I_Change role [mk_Ident' $ lower role] s
                   (rewriteExpr protect role
                    (AS_Except AS_OldVal
                     [AS_ExceptAssignment
@@ -903,15 +903,15 @@ mkExceptAssignment protect _var role (SH_ExprWrapper _
                                      (AS_InfixOP _ AS_EQ
                                       (AS_InfixOP _ AS_DOT
                                        (AS_InfixOP _ AS_FunApp
-                                        (AS_Ident _ _ s)
+                                        (AS_Ident (AS_Name _ _ s))
                                         (AS_FunArgList _ idx))
-                                       (AS_Ident _ _ field))
+                                       (AS_Ident (AS_Name _ _ field)))
                                       e)) =
   let e' = (AS_Except AS_OldVal
             [AS_ExceptAssignment
              [AS_ExceptNavField $ AS_Field field]
              e]) in
-    [TLA_I_Change role [mk_AS_Ident $ lower role] s
+    [TLA_I_Change role [mk_Ident' $ lower role] s
                   (rewriteExpr protect role
                    (AS_Except AS_OldVal
                     [AS_ExceptAssignment
@@ -1001,23 +1001,23 @@ rewriteExpr :: (Foldable t, Data a) => t String -> String -> a -> a
 rewriteExpr protect role = everywhere (mkT (f protect role))
   where f _protect "GLOBAL" i = i -- do not wrap reference inside GLOBAL role
         f _protect "global" i = i -- do not wrap reference inside GLOBAL role
-        f protect role i@(AS_Ident _ _ s) | elem s protect = -- conditional rew
+        f protect role i@(AS_Ident (AS_Name _ _ s)) | elem s protect = -- conditional rew
             AS_InfixOP epos AS_DOT                           -- if to be prot.
                   (AS_InfixOP epos AS_FunApp
-                     (mk_AS_Ident $ mkVar role)
-                     (AS_FunArgList epos [mk_AS_Ident $ lower role]))
+                     (mk_Ident' $ mkVar role)
+                     (AS_FunArgList epos [mk_Ident' $ lower role]))
                   i
-        f _protect role (AS_OpApp _ (AS_Ident _ _ v) -- unconditional rewr.
-                        [(AS_Ident _ _ viewedRole)])   -- to cover view(X)
+        f _protect role (AS_OpApp _ (AS_Name _ _ v) -- unconditional rewr.
+                        [(AS_Ident (AS_Name _ _ viewedRole))])   -- to cover view(X)
             | (v == "VIEW") || -- special operation
               (v == "view") = AS_InfixOP epos AS_DOT
                               (AS_InfixOP epos AS_FunApp
-                               (mk_AS_Ident $ mkVar role)
-                               (AS_FunArgList epos [mk_AS_Ident $ lower role]))
-                              (mk_AS_Ident $ mkView viewedRole)
-        f _protect role (AS_Ident _ _ self)
+                               (mk_Ident' $ mkVar role)
+                               (AS_FunArgList epos [mk_Ident' $ lower role]))
+                              (mk_Ident' $ mkView viewedRole)
+        f _protect role (AS_Ident (AS_Name _ _ self))
             | (self == "SELF") || -- special variable
-              (self == "self") = mk_AS_Ident $ lower role
+              (self == "self") = mk_Ident' $ lower role
         f _ _ x = x
 
 -------------------------------------------------------------------------------
@@ -1047,7 +1047,7 @@ grpTLA_I_ChangeList ctx changes =
                     if (completeRoleSet \\ roles) == []
                     then [] -- all roles (global set) are changed
                     else [AS_PrefixOP epos AS_UNCHANGED $
-                            AS_Tuple epos (map (mk_AS_Ident . mkVar)
+                            AS_Tuple epos (map (mk_Ident' . mkVar)
                                                (completeRoleSet \\ roles))])
       lets = grpTLA_I_Let changes
    in if lets == [] then expr else AS_Let epos lets expr
@@ -1057,15 +1057,15 @@ grpTLA_I_ChangeList ctx changes =
                    then []
                    else [AS_InfixOP epos AS_EQ
                            (AS_PostfixOP epos AS_Prime
-                              (mk_AS_Ident $ mkVar role))
-                           (AS_Except (mk_AS_Ident $ mkVar role) chgs)]
+                              (mk_Ident' $ mkVar role))
+                           (AS_Except (mk_Ident' $ mkVar role) chgs)]
 
 grpTLA_I_Let :: [TLA_I_Change] -> [AS_UnitDef]
 grpTLA_I_Let l = concat $ map grpTLA_I_Let0 l
   where grpTLA_I_Let0 :: TLA_I_Change -> [AS_UnitDef]
         grpTLA_I_Let0 (TLA_I_Let bindings) =
             map (\(s, e) ->
-                  AS_OperatorDef upos (AS_OpHead (mk_AS_Ident s) []) e)
+                  AS_OperatorDef upos (AS_OpHead (mk_Ident' s) []) e)
                 bindings
         grpTLA_I_Let0 _ = []
 
@@ -1083,11 +1083,11 @@ grpTLA_I_AssertList l = concat $ map grpTLA_I_Assert l
 grpTLA_I_Assert :: TLA_I_Change -> [AS_Expression]
 grpTLA_I_Assert (TLA_I_Assert role protect e s l) =
     [AS_OpApp epos
-     (mk_AS_Ident "Assert")
+     (mk_Ident' "Assert")
      [rewriteExpr protect role e,
-      AS_Tuple epos ([mk_AS_Ident $ show s] ++
+      AS_Tuple epos ([mk_Ident' $ show s] ++
                      (map (\e ->
-                           AS_Tuple epos [mk_AS_Ident (show $ prettyPrintE e),
+                           AS_Tuple epos [mk_Ident' (show $ prettyPrintE e),
                                           rewriteExpr protect role e]) l))]]
 grpTLA_I_Assert _ = []
 
@@ -1095,14 +1095,14 @@ grpTLA_I_FailList :: [TLA_I_Change] -> [AS_Expression]
 grpTLA_I_FailList l = concat $ map grpTLA_I_Fail l
 
 grpTLA_I_Fail :: TLA_I_Change -> [AS_Expression]
-grpTLA_I_Fail (TLA_I_FailTLAClause) = [mk_AS_Ident "FALSE"]
+grpTLA_I_Fail (TLA_I_FailTLAClause) = [mk_Ident' "FALSE"]
 grpTLA_I_Fail _ = []
 
 grpTLA_I_DropList :: [TLA_I_Change] -> [AS_Expression]
 grpTLA_I_DropList l = concat $ map grpTLA_I_Drop l
 
 grpTLA_I_Drop :: TLA_I_Change -> [AS_Expression]
-grpTLA_I_Drop (TLA_I_Drop _) = [mk_AS_Ident "TRUE"] -- enable inbox update
+grpTLA_I_Drop (TLA_I_Drop _) = [mk_Ident' "TRUE"] -- enable inbox update
 grpTLA_I_Drop _ = []
 
 roleNamesTLA_I_Change :: [TLA_I_Change] -> [String]
@@ -1166,7 +1166,7 @@ genTLA_MsgTypeDecl l =
      in if ml == []
         then []
         else [AS_OperatorDef upos
-              (AS_OpHead (mk_AS_Ident "Msg") [])
+              (AS_OpHead (mk_Ident' "Msg") [])
               (combineInfix AS_Cup ml)]
   where mkTLA_MsgTypeDeclEntry (TLA_MsgTypeDecl l) =
             [AS_RecordType epos $ map mk_AS_RecordTypeElement l]
@@ -1174,12 +1174,12 @@ genTLA_MsgTypeDecl l =
 
 genTLA_Constant :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_Constant l = AS_ConstantDecl upos $ nub (concat (map mkTLA_Constant l))
-  where mkTLA_Constant (TLA_Constant s) = [mk_AS_Ident s]
+  where mkTLA_Constant (TLA_Constant s) = [mk_Ident' s]
         mkTLA_Constant _ = []
 
 genTLA_Variable :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_Variable l = AS_VariableDecl upos $ nub (concat (map mkTLA_Variable l))
-  where mkTLA_Variable (TLA_Variable s) = [mk_AS_Ident s]
+  where mkTLA_Variable (TLA_Variable s) = [mk_Ident' s]
         mkTLA_Variable _ = []
 
 mk_AS_RecordTypeElement :: SH_VarDecl -> AS_RecordElementType
@@ -1188,52 +1188,52 @@ mk_AS_RecordTypeElement (ty,i) =
 
 genTLA_TypeInv :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_TypeInv l = AS_OperatorDef upos
-                     (AS_OpHead (mk_AS_Ident "TypeInvariant") [])
+                     (AS_OpHead (mk_Ident' "TypeInvariant") [])
                      (AS_LAND epos (concat $ map mkTLA_TypeInvEntry l))
   where mkTLA_TypeInvEntry (TLA_TypeInv (sh_type, i)) =
-            [AS_InfixOP epos AS_In (mk_AS_Ident i) (mk_AS_Type sh_type)]
+            [AS_InfixOP epos AS_In (mk_Ident' i) (mk_AS_Type sh_type)]
         mkTLA_TypeInvEntry _ = []
 
 mk_AS_Type :: SH_Type -> AS_Expression
-mk_AS_Type (SH_Ty_UserDef _ ty) = mk_AS_Ident ty
+mk_AS_Type (SH_Ty_UserDef _ ty) = mk_Ident' ty
 mk_AS_Type (SH_Ty_UserDefOrNIL _ ty) =
     AS_InfixOP epos AS_Cup (mk_AS_Type ty)
-                           (AS_DiscreteSet epos [mk_AS_Ident "NIL"])
+                           (AS_DiscreteSet epos [mk_Ident' "NIL"])
 mk_AS_Type (SH_Ty_Expr _ e) = e
 mk_AS_Type (SH_Ty_SetOf _ ty) =
     AS_PrefixOP epos AS_SUBSET $ (mk_AS_Type ty)
 mk_AS_Type (SH_Ty_SeqOf _ ty) =
-    AS_OpApp epos (mk_AS_Ident "Seq") [mk_AS_Type ty]
+    AS_OpApp epos (mk_Ident' "Seq") [mk_AS_Type ty]
 mk_AS_Type (SH_Ty_PairOf _ tyA tyB) =
     AS_InfixOP epos AS_Times (mk_AS_Type tyA) (mk_AS_Type tyB)
 mk_AS_Type (SH_Ty_Map _ tyA tyB) =
     AS_FunctionType epos (mk_AS_Type tyA) (mk_AS_Type tyB)
-mk_AS_Type (SH_Ty_Enum _ [e]) = AS_DiscreteSet epos [mk_AS_Ident $ show e]
+mk_AS_Type (SH_Ty_Enum _ [e]) = AS_DiscreteSet epos [mk_Ident' $ show e]
 mk_AS_Type (SH_Ty_Enum _ l) =
     combineInfix AS_Cup $ -- elements are quoted
-                 map (\s -> AS_DiscreteSet epos [mk_AS_Ident $ show s]) l
+                 map (\s -> AS_DiscreteSet epos [mk_Ident' $ show s]) l
 mk_AS_Type (SH_Ty_Union _ l) =
     combineInfix AS_Cup $ map mk_AS_Type l
 
 genTLA_Init :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_Init l = AS_OperatorDef upos
-                     (AS_OpHead (mk_AS_Ident "Init") [])
+                     (AS_OpHead (mk_Ident' "Init") [])
                      (AS_LAND epos (concat $ map mkTLA_InitEntry l))
   where mkTLA_InitEntry (TLA_Init i e) =
-            [AS_InfixOP epos AS_EQ (mk_AS_Ident i) (mk_AS_Expr e)]
+            [AS_InfixOP epos AS_EQ (mk_Ident' i) (mk_AS_Expr e)]
         mkTLA_InitEntry _ = []
 
 genTLA_Next :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_Next l = AS_OperatorDef upos
-                     (AS_OpHead (mk_AS_Ident "Next") [])
+                     (AS_OpHead (mk_Ident' "Next") [])
                      (AS_LOR epos (concat $ map mkTLA_ActionEntry l))
 
 genTLA_Fairness :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_Fairness l =
-  let vars = AS_Tuple epos (map mk_AS_Ident (concat $ map mkTLA_SpecEntry l))
+  let vars = AS_Tuple epos (map mk_Ident' (concat $ map mkTLA_SpecEntry l))
       actions = concat $ map mkTLA_ActionEntry l
    in AS_OperatorDef upos
-          (AS_OpHead (mk_AS_Ident "Fairness") [])
+          (AS_OpHead (mk_Ident' "Fairness") [])
           (AS_LAND epos (map (mkWF vars) actions))
   where mkWF vars action = AS_Fair False {-WF-} action vars
 
@@ -1243,28 +1243,28 @@ mkTLA_ActionEntry (TLA_Next singleMsgHndlr vartypes h) =
                 then [("_dummyNatT", "0")]
                 else []
    in if vartypes == []
-      then [AS_OpApp epos (mk_AS_Ident h) [] ]
+      then [AS_OpApp epos (mk_Ident' h) [] ]
       else [AS_Quantified epos AS_Exist
                   (map (\(t,i) ->
-                     AS_QBoundN [mk_AS_Ident i] (mk_AS_Ident t))
+                     AS_QBoundN [mk_Ident' i] (mk_Ident' t))
                      vartypes)
                   (AS_OpApp epos
-                   (mk_AS_Ident h)
-                   (map (\(_,i) -> mk_AS_Ident i) (vartypes ++ smhargs)))]
+                   (mk_Ident' h)
+                   (map (\(_,i) -> mk_Ident' i) (vartypes ++ smhargs)))]
 mkTLA_ActionEntry _ = []
 
 
 genTLA_Spec :: [TLA_GrpElement] -> AS_UnitDef
 genTLA_Spec l = let vars = AS_Tuple epos
-                           (map mk_AS_Ident (concat $ map mkTLA_SpecEntry l))
-                    fair = [mk_AS_Ident "Fairness"]
+                           (map mk_Ident' (concat $ map mkTLA_SpecEntry l))
+                    fair = [mk_Ident' "Fairness"]
                  in AS_OperatorDef upos
-                     (AS_OpHead (mk_AS_Ident "Spec") [])
+                     (AS_OpHead (mk_Ident' "Spec") [])
                        (AS_LAND epos
-                         ([ mk_AS_Ident "Init"
+                         ([ mk_Ident' "Init"
                           , (AS_PrefixOP epos AS_ALWAYS
                               (AS_Stutter
-                                (mk_AS_Ident "Next") vars))
+                                (mk_Ident' "Next") vars))
                           ] ++ fair))
 
 mkTLA_SpecEntry :: TLA_GrpElement -> [String]
@@ -1279,12 +1279,12 @@ genTLA_Wrapper l = concat $ map genTLA_Wrapper1 l
 -- FIXME kramer@acm.org reto -- seems very broken, does this ever get called?
 mk_AS_Expr :: SH_ExprWrapper -> AS_Expression
 mk_AS_Expr (SH_ExprWrapper _ e) = e
-mk_AS_Expr (SH_VIEW_REF _ s) = mk_AS_Ident $ "vIEW_"++s
+mk_AS_Expr (SH_VIEW_REF _ s) = mk_Ident' $ "vIEW_"++s
 
 combineInfix :: AS_InfixOp -> [AS_Expression] -> AS_Expression
 combineInfix _op [e] = e
 combineInfix  op (h:rest) = AS_InfixOP epos op h $ combineInfix op rest
-combineInfix _op [] = mk_AS_Ident "Uh"
+combineInfix _op [] = mk_Ident' "Uh"
 
 genTLA_Boilerplate :: [(String, String)] -> [String] -> [AS_UnitDef]
 genTLA_Boilerplate rolePairs roles =
@@ -1395,7 +1395,7 @@ mkDeliverMsgAction sender receiver = sender ++ "MultiSendTo" ++ receiver
 
 substSH_Instr :: [(String, SH_ExprWrapper)] -> SH_Instr -> SH_Instr
 substSH_Instr l = everywhere (mkT f)
-  where f i@(AS_Ident _ _ s) =
+  where f i@(AS_Ident (AS_Name _ _ s)) =
             case lookup s l of Nothing -> i
                                Just (SH_ExprWrapper _ e) -> e
                                Just _ -> undefined
@@ -1403,9 +1403,9 @@ substSH_Instr l = everywhere (mkT f)
 
 substAS_Expr :: [(String, String)] -> AS_Expression -> AS_Expression
 substAS_Expr l = everywhere (mkT f)
-  where f i@(AS_Ident _ _ s) =
+  where f i@(AS_Ident (AS_Name _ _ s)) =
             case lookup s l of Nothing -> i
-                               Just w  -> mk_AS_Ident w
+                               Just w  -> mk_Ident' w
         f x = x
 
 ---- HELPER -------------------------------------------------------------------
@@ -1445,9 +1445,6 @@ hashStr s = case Base64.decode s of
 
 mk_AS_Separator :: AS_UnitDef
 mk_AS_Separator = AS_Separator upos
-
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident s = AS_Ident epos [] s
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos name line col = newPos name line col

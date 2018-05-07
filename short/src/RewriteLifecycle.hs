@@ -56,16 +56,16 @@ addStutterIfNothingRunning spec =
              in SH_RoleDef upos "GLOBAL" vars (l ++ [stutter] ++ [fakeState])
         f x = x
         mkNotRunningClause role =
-            let bounds = [AS_QBoundN [mk_AS_Ident $ lower role]
-                                     (mk_AS_Ident role)]
+            let bounds = [AS_QBoundN [mk_Ident' $ lower role]
+                                     (mk_Ident' role)]
              in AS_Quantified epos AS_All bounds $
                   AS_PrefixOP epos AS_Not $
                     AS_InfixOP epos AS_DOT
                        (AS_InfixOP epos AS_FunApp
-                          (mk_AS_Ident $ mkVar role)
+                          (mk_Ident' $ mkVar role)
                           (AS_FunArgList epos
-                             [mk_AS_Ident $ lower role]))
-                       (mk_AS_Ident "g_running")
+                             [mk_Ident' $ lower role]))
+                       (mk_Ident' "g_running")
 
 -- FIXME kramer@acm.org reto -- cop out. Should really remove this instr!
 removeSHUTDOWN :: SH_FL_Spec -> SH_FL_Spec
@@ -124,8 +124,8 @@ rewriteCrashHandlers = everywhere (mkT f)
   where f (SH_CrashHandler info ann role when n id hook l) =
             let m = mkCrashMsgName n (upper role)
                 e = AS_InfixOP epos AS_DOT
-                      (mk_AS_Ident m)
-                      (mk_AS_Ident "sender")
+                      (mk_Ident' m)
+                      (mk_Ident' "sender")
              in SH_MsgHandler info ann role when m hook False Nothing
                   $ prependIL [SH_I_Let upos [(id, SH_ExprWrapper upos e)]] l
         f x = x
@@ -190,15 +190,15 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
                        (Just $ SH_ExprWrapper upos
                           (AS_PrefixOP epos AS_Not
                              (AS_InfixOP epos AS_In
-                                (mk_AS_Ident $ lower name)
-                                (mk_AS_Ident ("InitDown" ++ name)))))
+                                (mk_Ident' $ lower name)
+                                (mk_Ident' ("InitDown" ++ name)))))
                 lifec = SH_State upos False
                          (SH_Ty_UserDef upos "{0,1,2}", "g_lifecycle")
                          (Just $ SH_ExprWrapper upos (AS_Num epos 0))
                 inc = SH_I_ChangeState upos
                         [SH_ExprWrapper upos
                          (AS_InfixOP epos AS_EQ
-                          (mk_AS_Ident "g_lifecycle")
+                          (mk_Ident' "g_lifecycle")
                           (AS_InfixOP epos AS_Plus
                              AS_OldVal
                              (AS_Num epos 1)))]
@@ -206,32 +206,32 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
                           then [SH_CallHandler upos (lower name)
                                  (Just $ SH_ExprWrapper upos
                                            (AS_LAND epos [
-                                             mk_AS_Ident "g_running",
+                                             mk_Ident' "g_running",
                                              AS_InfixOP epos AS_LT
-                                                (mk_AS_Ident "g_lifecycle")
+                                                (mk_Ident' "g_lifecycle")
                                                 (AS_Num epos 2),
                                              AS_InfixOP epos AS_In
-                                                (mk_AS_Ident $ lower name)
-                                                (mk_AS_Ident ("Crash" ++ name))]))
+                                                (mk_Ident' $ lower name)
+                                                (mk_Ident' ("Crash" ++ name))]))
                                  ("do_crash_" ++ name) []
                                 -- we offer a well know hook name to allow for
                                 -- extensions
                                  (Just [SH_HookCaller upos
                                           ("hook_do_crash_" ++ name)
                                           [SH_ExprWrapper upos $
-                                             mk_AS_Ident "self"]])
+                                             mk_Ident' "self"]])
                                  [SH_GuardedInstrList upos Nothing Nothing
                                     (genLastActions spec name ++ [inc])]]
                           else []
                 flipOn = SH_I_ChangeState upos
                          [SH_ExprWrapper upos
                            (AS_InfixOP epos AS_EQ
-                             (mk_AS_Ident "g_running")
+                             (mk_Ident' "g_running")
                              (AS_Bool epos True))]
                 clearInbox = SH_I_ChangeState upos
                              [SH_ExprWrapper upos
                               (AS_InfixOP epos AS_EQ
-                               (mk_AS_Ident "g_inbox")
+                               (mk_Ident' "g_inbox")
                                (AS_Tuple epos []))]
                 -- let each role instance start at most once to avoid flapping
                 starter = if  name `elem` spontanousCrashers
@@ -239,9 +239,9 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
                                  (Just $ SH_ExprWrapper upos
                                            (AS_LAND epos [
                                              AS_PrefixOP epos AS_Not
-                                                  (mk_AS_Ident "g_running"),
+                                                  (mk_Ident' "g_running"),
                                              AS_InfixOP epos AS_LT
-                                                (mk_AS_Ident "g_lifecycle")
+                                                (mk_Ident' "g_lifecycle")
                                                 (AS_Num epos 2)]))
                                  ("do_start_" ++ name) []
                                 -- we offer a well know hook name to allow for
@@ -249,22 +249,22 @@ rewriteRole spontanousCrashers spec = everywhere (mkT (f spec))
                                  (Just [SH_HookCaller upos
                                           ("hook_do_start_" ++ name)
                                           [SH_ExprWrapper upos $
-                                             mk_AS_Ident "self"]])
+                                             mk_Ident' "self"]])
                                  [SH_GuardedInstrList upos
                                     (Just $ SH_ExprWrapper upos
                                          (AS_InfixOP epos AS_In
-                                           (mk_AS_Ident $ lower name)
-                                           (mk_AS_Ident ("Start" ++ name))))
+                                           (mk_Ident' $ lower name)
+                                           (mk_Ident' ("Start" ++ name))))
                                     Nothing
                                     [inc, flipOn, clearInbox],
                                   SH_GuardedInstrList upos
                                     (Just $ SH_ExprWrapper upos
-                                       (mk_AS_Ident "otherwise"))
+                                       (mk_Ident' "otherwise"))
                                     Nothing
                                     [SH_I_FailTLAClause upos]]]
                           else []
              in SH_RoleDef upos name vars $
-                  predicateWhen (mk_AS_Ident "g_running") l ++
+                  predicateWhen (mk_Ident' "g_running") l ++
                     [st, lifec] ++ crasher ++ starter
         f _ x = x
 
@@ -306,7 +306,7 @@ addResetNonPersistentState spec = everywhere (mkT (f spec))
                   -- init expression (see short).
                   let (Just (SH_ExprWrapper _ i)) = init
                       assign = SH_ExprWrapper upos $ AS_InfixOP epos AS_EQ
-                                                       (mk_AS_Ident varname)
+                                                       (mk_Ident' varname)
                                                        i
                    in [SH_I_ChangeState upos [assign]]
               | otherwise  = []
@@ -316,7 +316,7 @@ addResetNonPersistentState spec = everywhere (mkT (f spec))
                       [k] = typeKernel ty
                       varname = mkView k
                       assign = SH_ExprWrapper upos $ AS_InfixOP epos AS_EQ
-                                                       (mk_AS_Ident varname)
+                                                       (mk_Ident' varname)
                                                        i
                    in [SH_I_ChangeState upos [assign]]
               | otherwise  = []
@@ -334,23 +334,23 @@ genLastActions spec name =
     let i0 = [SH_I_ChangeState upos
                [SH_ExprWrapper upos
                   (AS_InfixOP epos AS_EQ
-                     (mk_AS_Ident "g_running")
+                     (mk_Ident' "g_running")
                      (AS_Bool epos False))]]
         handlers = crashHandlingRolesFor spec name
         sends = map (\h ->
                      let dest = upper h -- FIXME kramer@acm.org reto -- ****
                          destE = AS_SetComprehension epos
                                    (AS_QBound1
-                                     (mk_AS_Ident $
+                                     (mk_Ident' $
                                         "local_"++lower dest)
-                                     (mk_AS_Ident $ dest))
+                                     (mk_Ident' $ dest))
                                    (AS_InfixOP epos AS_DOT
                                      (AS_InfixOP epos AS_FunApp
-                                        (mk_AS_Ident $ mkVar dest)
+                                        (mk_Ident' $ mkVar dest)
                                         (AS_FunArgList epos
-                                           [mk_AS_Ident $
+                                           [mk_Ident' $
                                               "local_"++lower dest]))
-                                     (mk_AS_Ident "g_running"))
+                                     (mk_Ident' "g_running"))
                       in SH_I_MsgSend1 upos (lower name)
                            True {- multi send -}
                            True {- LAST GASP msg, no append, set obuf to msg -}
@@ -472,8 +472,8 @@ upper (x:xs) = toUpper x : xs
 upper [] = undefined
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
+-- mk_Ident' :: String -> AS_Expression
+-- mk_Ident' = AS_Ident epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos

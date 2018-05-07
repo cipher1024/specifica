@@ -64,14 +64,14 @@ rewriteTag = dropTag -- tags are no longer used beyond this weave step
 -- can resolve them)
 rewriteSpecialOperators :: SH_FL_Spec -> SH_FL_Spec
 rewriteSpecialOperators = everywhere (mkT f)
-  where f (AS_OpApp epos (AS_Ident a b "all") l) =
-            AS_OpApp epos (AS_Ident a b "ALL") l
-        f (AS_OpApp epos (AS_Ident a b "any") l) =
-            AS_OpApp epos (AS_Ident a b "ANY") l
-        f (AS_OpApp epos (AS_Ident a b "any2") l) =
-            AS_OpApp epos (AS_Ident a b "ANY2") l
-        f (AS_OpApp epos (AS_Ident a b "senders") l) =
-            AS_OpApp epos (AS_Ident a b "SENDERS") l
+  where f (AS_OpApp epos (AS_Name a b "all") l) =
+            AS_OpApp epos (AS_Name a b "ALL") l
+        f (AS_OpApp epos (AS_Name a b "any") l) =
+            AS_OpApp epos (AS_Name a b "ANY") l
+        f (AS_OpApp epos (AS_Name a b "any2") l) =
+            AS_OpApp epos (AS_Name a b "ANY2") l
+        f (AS_OpApp epos (AS_Name a b "senders") l) =
+            AS_OpApp epos (AS_Name a b "SENDERS") l
         f x = x
 
 dummyI :: String
@@ -130,8 +130,8 @@ rewriteREPLY = everywhere (mkT f)
                       False
                       False
                       (SH_ExprWrapper upos $ AS_InfixOP epos AS_DOT
-                         (mk_AS_Ident reqm)
-                         (mk_AS_Ident "sender"))
+                         (AS_Ident $ mk_AS_Ident reqm)
+                         (AS_Ident $ mk_AS_Ident "sender"))
                       restype ass
                 g _ _ x = x
 
@@ -231,8 +231,8 @@ typeKernel (SH_Ty_Enum _ l) = l
 typeKernel _ = undefined
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
+mk_AS_Ident :: String -> AS_Name
+mk_AS_Ident = AS_Name epos []
 
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos

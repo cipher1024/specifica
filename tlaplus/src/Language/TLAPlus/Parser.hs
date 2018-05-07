@@ -105,21 +105,18 @@ unit = do{ l <- sepBy (choice [ -- try as cheap way to left factor identifier
          ; return l
          }
 
-mkIdent :: SourcePos -> [String] -> String -> AS_Expression
-mkIdent p = AS_Ident (mkInfo p)
 
 mkInfo :: SourcePos -> AS_InfoE
 mkInfo p = (p, Nothing, Nothing)
 
-qualident :: TLAParser AS_Expression
-qualident = do{ p <- getPosition
+qualident :: TLAParser AS_Name
+qualident = do p <- getPosition
 --              ; l <- sepBy1 identifier (char '!') -- for TLA+
 -- FIXME, for australis/short: meaning of ! is incompatible with TLA+, ifdef?
-              ; i <- identifier -- HACK FIXME, Short does use the ! for
-              ; let l = [i]     -- message sending!
-              ; let lr = reverse l
-                 in return $ mkIdent p (reverse $ tail lr) (head lr)
-              }
+               i <- identifier -- HACK FIXME, Short does use the ! for
+               let l = [i]     -- message sending!
+                   lr = reverse l
+               return $ mk_IdentAt p (reverse $ tail lr) (head lr)
 
 operatorHead :: TLAParser AS_OperatorHead
 operatorHead = do{ qname <- qualident
@@ -132,7 +129,7 @@ operatorHeadEntry = do{ p <- getPosition
                       ; qname <- qualident
                       ; l <- option [] (parens $ commaSep expression)
                       ; if l == []
-                        then return qname
+                        then return $ AS_Ident qname
                         else return $ AS_OpApp (mkInfo p) qname l
                       }
 
@@ -375,7 +372,7 @@ basicExprListNoAngularClose =
         ; return $ AS_StringLiteral (mkInfo p) s
         }
     , boolean
-    , qualident
+    , AS_Ident <$> qualident
     , do{ _ <- char '@'
         ; whiteSpace
         ; return AS_OldVal
@@ -399,8 +396,9 @@ caseArm = do{ p <- getPosition
             ; reservedOp "->"
             ; b <- expression
             ; return $ case a of
-                (AS_Ident _info [] "OTHER") -> AS_OtherCaseArm (mkInfo p) b
-                _                           -> AS_CaseArm (mkInfo p) a b
+                (AS_Ident (AS_Name _info [] "OTHER"))
+                    -> AS_OtherCaseArm (mkInfo p) b
+                _   -> AS_CaseArm (mkInfo p) a b
             }
 
 caseExpr :: TLAParser AS_Expression
@@ -455,7 +453,7 @@ squareExprStutter = do{ e <- squares expression
                       ; _ <- char '_'
                       ; st <-    do{ p <- getPosition
                                    ; i <- identifier
-                                   ; return $ mkIdent p [] i }
+                                   ; return $ mk_IdentAt p [] i }
                              <|> gtgtExpr -- tuple
                       ; return $ AS_Stutter e st
                       }

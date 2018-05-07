@@ -30,7 +30,7 @@ glueContinue = everywhere (mkT f)
               let ginstr' = addHooksIfNoBreak
                               [SH_HookCaller upos
                                  (mkHookName mbind)
-                                 [SH_ExprWrapper upos $ mk_AS_Ident mbind]]
+                                 [SH_ExprWrapper upos $ mk_Ident' mbind]]
                               ginstr
                   ginstr'' = (dropCONTINUE . dropBREAK) ginstr'
                   -- turn of the tagging ANY flag!
@@ -137,7 +137,7 @@ instantiateMsgHandler anyH (SH_MsgHandler _ _ann role when mbind glblHooks
                                            rewriteAnyHandlerGuard ! -}
                          amtype _aglblHooks True Nothing aginstr = anyH
       -- replace ANY m with actual mtype of specific handler
-      gil' = substGIL [(amtype, SH_ExprWrapper upos (mk_AS_Ident mbind))]
+      gil' = substGIL [(amtype, SH_ExprWrapper upos (mk_Ident' mbind))]
                aginstr
    in [SH_MsgHandler upos ann role when mbind glblHooks
          True {- HACK HACK mark generated handler with ANY flag, see *** -}
@@ -189,7 +189,7 @@ dropCONTINUE = map remCONTINUE
 --             let mtypes = dominatedMsgTypes spec role
 --                 hs = map (\mtype -> SH_HookCaller upos
 --                               (mkHookName mtype)
---                               [SH_ExprWrapper upos $ mk_AS_Ident mbind])
+--                               [SH_ExprWrapper upos $ mk_Ident' mbind])
 --                      mtypes
 --              in if mtypes /= []
 --                 then let ginstr' = addHooksIfNoBreak hs ginstr
@@ -223,9 +223,9 @@ mkExtend :: SH_FL_Spec -> SH_RoleElement -> SH_RoleElement
 mkExtend _spec (SH_MsgHandler i _ann role _when mtype _glblHooks _a _from ginstr) =
     -- let -- mtypeGuard = AS_InfixOP epos AS_EQ
     --     --               (AS_InfixOP epos AS_DOT
-    --     --                (mk_AS_Ident mtype)
-    --     --                (mk_AS_Ident "type"))
-    --     --               (mk_AS_Ident $ show mtype)
+    --     --                (mk_Ident' mtype)
+    --     --                (mk_Ident' "type"))
+    --     --               (mk_Ident' $ show mtype)
     --     -- guards = [Just $ SH_ExprWrapper upos mtypeGuard,
     --     --           when]
     --     ginstr' = addGuards guards ginstr
@@ -245,7 +245,7 @@ addGuards :: [Maybe SH_ExprWrapper] -> [SH_GuardedInstrList]
 addGuards guards = map f
   where f gil@(SH_GuardedInstrList _ g hooks instrs) =
             case g of
-              (Just (SH_ExprWrapper _ (AS_Ident _ _ "otherwise"))) ->
+              (Just (SH_ExprWrapper _ (AS_Ident (AS_Name _ _ "otherwise")))) ->
                   gil -- if guard was "otherwise ->", do not alter!
               _ ->
                   SH_GuardedInstrList upos (combineGuards (guards ++ [g]))
@@ -262,9 +262,6 @@ dropNothing l = let l' = filter (/= Nothing) l
                  in map (\(Just (SH_ExprWrapper _ e)) -> e) l'
 
 ---- HELPER -------------------------------------------------------------------
-mk_AS_Ident :: String -> AS_Expression
-mk_AS_Ident = AS_Ident epos []
-
 mkPos :: String -> Int -> Int -> PPos.SourcePos
 mkPos = newPos
 

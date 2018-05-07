@@ -10,6 +10,9 @@ library:
   source-dirs: src
   dependencies:
     - base
+    - template-haskell
+    - tlaplus
+    - lens
 
 tests:
   test1:
@@ -19,5 +22,7 @@ tests:
       - base
       - tlaplus
       - parsec >= 3.0.1
+      - template-haskell
       - hspec
       - lens
+      - tlaplus-quickcheck
