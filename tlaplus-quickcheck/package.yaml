@@ -6,6 +6,9 @@ ghc-options:
   - -fwarn-tabs
   - -fno-warn-name-shadowing
 
+default-extensions:
+  - TupleSections
+
 library:
   source-dirs: src
   dependencies:
@@ -13,6 +16,7 @@ library:
     - template-haskell
     - tlaplus
     - lens
+    - tlaplus-eval
 
 tests:
   test1:
@@ -26,3 +30,4 @@ tests:
       - hspec
       - lens
       - tlaplus-quickcheck
+      - containers

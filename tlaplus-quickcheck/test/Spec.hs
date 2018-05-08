@@ -2,6 +2,7 @@
 module Main where
 
 import Control.Lens
+import Data.Map as M hiding (mapMaybe,map)
 import Data.Maybe
 import Language.Haskell.TH
 import Language.TLAPlus.Parser
@@ -46,6 +47,9 @@ main = hspec $ do
       it "bridge.tla num vars" $
           fmap (length . mapMaybe (preview _AS_VariableDecl) . unitDef) <$> example
           `shouldReturn` Right 1
-      it "bridge.tla state record" $
-          runQ (tlaImportSpec "example/bridge.tla")
-          `shouldReturn` [bridgeRecord]
+      it "bridge.tla state initial record" $
+          initBridge
+          `shouldBe` Right Bridge_State
+          { loc = toValue $ fromList $ map (,"left") ["me","assistant","janitor","professor"]
+          , torch = toValue "left"
+          , time = toValue (0 :: Int) }

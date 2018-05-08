@@ -19,13 +19,13 @@ import qualified Data.Map as Map (union, lookup, insert, empty, singleton,
 import GHC.Stack
 
 import Text.Parsec.Pos
-import Text.PrettyPrint.Leijen
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Language.TLAPlus.Syntax
 import Language.TLAPlus.Pretty
 
 eval :: [AS_Spec] -> CFG_Config -> ThrowsError [VA_Value]
-eval specs cfg = evalReturnEnv specs cfg >>= \(_, vs) -> return vs
+eval specs cfg = snd <$> evalReturnEnv specs cfg
 
 evalReturnEnv :: [AS_Spec] -> CFG_Config -> ThrowsError (Env, [VA_Value])
 evalReturnEnv specs cfg =
@@ -797,6 +797,7 @@ data EvalError = Default String -- FIXME, do I really need this?
                | KeyNotFound Env AS_Expression VA_Value VA_Value String
                | FunAppIllegalOperand AS_Expression VA_Value VA_Value
                | RdBeforeWr AS_Expression
+    deriving Eq
 instance Show EvalError where show = ppError
 
 ppError :: EvalError -> String

@@ -1,11 +1,18 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Language.TLAPlus.Syntax where
 
 import Control.Lens
+import Control.Monad
 
+import Data.Bitraversable
 import Data.Map as Map hiding (map)
 import Data.Set as Set hiding (map)
 import Data.Generics
+
+import Language.Haskell.TH.Syntax
 
 import Text.ParserCombinators.Parsec.Pos as PPos
 
@@ -15,14 +22,14 @@ type AS_InfoU = PPos.SourcePos
 data AS_Spec = AS_Spec {name :: String,
                         extendDecl   :: AS_ExtendDecl,
                         unitDef      :: [AS_UnitDef]}
-               deriving (Eq, Ord, Show, Data, Typeable)
+               deriving (Eq, Ord, Show, Data, Typeable, Lift)
 data AS_ExtendDecl = AS_ExtendDecl PPos.SourcePos [String]
-                     deriving (Eq, Ord, Show, Data, Typeable)
+                     deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_QBoundN = AS_QBoundN [AS_Name] AS_Expression
-                  deriving (Eq, Ord, Show, Data, Typeable)
+                  deriving (Eq, Ord, Show, Data, Typeable, Lift)
 data AS_QBound1 = AS_QBound1 AS_Name AS_Expression
-                  deriving (Eq, Ord, Show, Data, Typeable)
+                  deriving (Eq, Ord, Show, Data, Typeable, Lift)
 data AS_UnitDef =
     AS_FunctionDef AS_InfoU AS_Name [AS_QBoundN] AS_Expression
   | AS_OperatorDef AS_InfoU AS_OperatorHead AS_Expression
@@ -31,11 +38,13 @@ data AS_UnitDef =
   | AS_ConstantDecl AS_InfoU [AS_Name]
   | AS_VariableDecl AS_InfoU [AS_Name]
   | AS_Separator AS_InfoU
-    deriving (Eq, Ord, Show, Data, Typeable)
+    deriving (Eq, Ord, Show, Data, Typeable, Lift)
+
+instance Lift PPos.SourcePos where
 
 data AS_OperatorHead = AS_OpHead AS_Name [AS_Expression]
 
-                       deriving (Eq, Ord, Show, Data, Typeable)
+                       deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 class HasIdent a where
     mk_Ident :: AS_InfoE -> [String] -> String -> a
@@ -53,7 +62,7 @@ instance HasIdent AS_Expression where
     mk_Ident x ps n = AS_Ident $ AS_Name x ps n
 
 data AS_Name = AS_Name AS_InfoE [String] String -- possibly prefixed X!Y!a
-    deriving (Eq, Ord, Show, Data, Typeable)
+    deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_Expression =
         AS_Ident AS_Name
@@ -93,29 +102,29 @@ data AS_Expression =
         -- in Parser.op_infixS we replace AS_CloseFunApp with the correct
         -- expression tree. AS_CloseFunApp thus never appears in a correct AST
       | AS_CloseFunApp -- the ] in a f[a,b] construct
-        deriving (Eq, Ord, Show, Data, Typeable)
+        deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
-data AS_Field = AS_Field String deriving (Eq, Ord, Show, Data, Typeable)
+data AS_Field = AS_Field String deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_ExceptNav = AS_ExceptNavField AS_Field                            -- .x
                   | AS_ExceptNavApp [AS_Expression]                    -- [x,y]
-                    deriving (Eq, Ord, Show, Data, Typeable)
+                    deriving (Eq, Ord, Show, Data, Typeable, Lift)
 data AS_ExceptAssignment = AS_ExceptAssignment [AS_ExceptNav] AS_Expression
-                           deriving (Eq, Ord, Show, Data, Typeable)
+                           deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_CaseArm = AS_CaseArm AS_InfoE AS_Expression AS_Expression
                 | AS_OtherCaseArm AS_InfoE AS_Expression
-                  deriving (Eq, Ord, Show, Data, Typeable)
+                  deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_RecordElementType = AS_RecordElementType AS_InfoE
                               AS_Field AS_Expression
-                            deriving (Eq, Ord, Show, Data, Typeable)
+                            deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_QuantifierKind = AS_All | AS_Exist
-                         deriving (Eq, Ord, Show, Data, Typeable)
+                         deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_MapTo = AS_MapTo AS_Field AS_Expression
-                deriving (Eq, Ord, Show, Data, Typeable)
+                deriving (Eq, Ord, Show, Data, Typeable, Lift)
 
 data AS_PrefixOp = AS_SUBSET
                  | AS_INSTANCE
@@ -125,9 +134,9 @@ data AS_PrefixOp = AS_SUBSET
                  | AS_Not
                  | AS_ALWAYS
                  | AS_Eventually
-                   deriving (Eq, Ord, Show, Data, Typeable)
+                   deriving (Eq, Ord, Show, Data, Typeable, Lift)
 data AS_PostfixOp = AS_Prime
-                    deriving (Eq, Ord, Show, Data, Typeable)
+                    deriving (Eq, Ord, Show, Data, Typeable, Lift)
 data AS_InfixOp = AS_EQ
                 | AS_NEQ
                 | AS_COLONGT
@@ -156,7 +165,7 @@ data AS_InfixOp = AS_EQ
                 | AS_Implication
                 | AS_TildeGT
                 | AS_FunApp -- f.g[a,b] => f.g `funapp` arrayref [a,b]
-                  deriving (Eq, Ord, Show, Data, Typeable)
+                  deriving (Eq, Ord, Show, Data, Typeable, Lift)
 -------------------------------------------------------------------------------
 
 parentE :: AS_Expression -> Maybe AS_Expression
@@ -291,6 +300,28 @@ data VA_Value = VA_Map (Map VA_Value VA_Value)       -- map
               | VA_Var (Maybe VA_Value)
               | VA_FunArgList [VA_Value]             -- eval internal only
                 deriving (Eq, Ord, Show, Data, Typeable)
+
+makePrisms ''VA_Value
+
+class Ord a => IsTLAValue a where
+    toValue :: a -> VA_Value
+    fromValue :: VA_Value -> Maybe a
+
+instance IsTLAValue Int where
+    toValue = VA_Int
+    fromValue = preview _VA_Int
+
+instance IsTLAValue String where
+    toValue = VA_String
+    fromValue = preview _VA_String
+
+asList :: Ord k' => Lens (Map k a) (Map k' a') [(k,a)] [(k',a')]
+asList = lens Map.toList (const Map.fromList)
+
+instance (IsTLAValue k,IsTLAValue a) => IsTLAValue (Map k a) where
+    toValue = VA_Map . (asList %~ map (bimap toValue toValue))
+    fromValue = asList (traverse $ bitraverse fromValue fromValue)
+                <=< preview _VA_Map
 
 data TY_Type = TY_Map | TY_Rec | TY_Set | TY_Seq |
                TY_Int | TY_Bool | TY_String | TY_Char | TY_Atom |
