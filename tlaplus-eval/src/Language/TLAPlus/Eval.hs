@@ -1,6 +1,8 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Language.TLAPlus.Eval where
 
 import Control.Lens
+import Control.Lens.Extras
 
 import Data.Bifunctor
 
@@ -12,7 +14,7 @@ import Data.Maybe
 import qualified Data.Set as Set (union, intersection,
                                   isSubsetOf, empty, size, insert)
 import Data.Set as Set (fromList, elems, (\\), member)
-import Data.List as List (map, lookup)
+import Data.List as List (map, lookup, foldr)
 import qualified Data.Map as Map (union, lookup, insert, empty, singleton,
                                   keys, fromList, toList)
 
@@ -24,32 +26,50 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 import Language.TLAPlus.Syntax
 import Language.TLAPlus.Pretty
 
+------------------
+-- ENV HANDLING --
+------------------
+type Env = [Binding] -- one env per module
+
+data Id = Primed [String] String
+        | Unprimed [String] String
+        deriving (Show,Eq,Ord)
+
+type Binding = (Id, VA_Value) -- add module qualifiers
+
+instance HasIdent Id where
+    mk_Ident _ = Unprimed
+
+makePrisms ''Id
+
 eval :: [AS_Spec] -> CFG_Config -> ThrowsError [VA_Value]
 eval specs cfg = snd <$> evalReturnEnv specs cfg
 
 evalReturnEnv :: [AS_Spec] -> CFG_Config -> ThrowsError (Env, [VA_Value])
 evalReturnEnv specs cfg =
-    do{ let bindings = map (mkBinding "foospec") (cfg_constants cfg)
-      ; env <- foldM (\e b -> bind e b) mkEmptyEnv bindings
-      ; env' <- addBuiltIn env -- FIXME make module extend specific
-      ; let units = concatMap unitDef specs
-      ; (env'', vs) <- foldM evalUnitT (env', []) units
-      ; return (env'', vs)
-      }
-    where mkBinding :: String -> (CFG_Ident, CFG_Value)
-                    -> (AS_Name, VA_Value)
-          mkBinding q (i,v) = (toASIdent q i, toASValue v)
-          toASIdent :: String -> CFG_Ident -> AS_Name
-          toASIdent _q (CFG_Ident _ i) = -- FIXME what about q?
-              AS_Name (mkDummyInfo "a-cfg-value") [] i
-          toASValue :: CFG_Value -> VA_Value
-          toASValue (CFG_Atom _ s) = VA_Atom s
-          toASValue (CFG_Bool _ b) = VA_Bool b
-          toASValue (CFG_Int _ i) = VA_Int i
-          toASValue (CFG_StringLiteral _ s) = VA_String s
-          toASValue (CFG_Set _ set) =
-              let l = map toASValue (elems set)
-               in VA_Set (Set.fromList l)
+    do  let bindings = map (mkBinding "foospec") (cfg_constants cfg)
+            env :: Env
+            env = List.foldr (\b e -> bind b e) mkEmptyEnv bindings
+            env' = addBuiltIn env -- FIXME make module extend specific
+            units = concatMap unitDef specs
+        (env'', vs) <- foldM evalUnitT (env', []) units
+        return (env'', vs)
+
+mkBinding :: String -> (CFG_Ident, CFG_Value)
+          -> (Id, VA_Value)
+mkBinding q (i,v) = (toASIdent q i, toASValue v)
+
+toASIdent :: String -> CFG_Ident -> Id
+toASIdent _q (CFG_Ident _ i) = -- FIXME what about q?
+    Unprimed [] i
+toASValue :: CFG_Value -> VA_Value
+toASValue (CFG_Atom _ s) = VA_Atom s
+toASValue (CFG_Bool _ b) = VA_Bool b
+toASValue (CFG_Int _ i) = VA_Int i
+toASValue (CFG_StringLiteral _ s) = VA_String s
+toASValue (CFG_Set _ set) =
+    let l = map toASValue (elems set)
+     in VA_Set (Set.fromList l)
 
 evalUnitT :: (Env, [VA_Value]) -> AS_UnitDef -> ThrowsError (Env, [VA_Value])
 evalUnitT (env, vs) u =
@@ -70,17 +90,19 @@ evalUnit (env,vs) (AS_ConstantDecl _uinfo l) =
       }
 -- FIXME for now only bind the name, so a ref succeeds
 evalUnit (env,vs) (AS_VariableDecl _uinfo ids) =
-    do{ env' <- foldM (\env id -> bind env (id, VA_Var Nothing)) env ids
+    do{ let env' = List.foldr (\id -> do
+                            bind (unprimed id, VA_Var Nothing)
+                                . bind (primed id, VA_Var Nothing) ) env ids
       ; return $ (env', vs)
       }
 evalUnit (env,vs) u@(AS_FunctionDef _ head _ _) =
     do{ v <- evalU env u
-      ; env' <- bind env (head, v)
+      ; let env' = bind (unprimed head, v) env
       ; return $ (env', vs)
       }
 evalUnit (env,vs) u@(AS_OperatorDef _ (AS_OpHead head _) _) =
     do{ v <- evalU env u
-      ; env' <- bind env (head, v)
+      ; let env' = bind (unprimed head, v) env
       ; return $ (env', vs)
       }
 evalUnit _acc u =
@@ -145,7 +167,7 @@ evalE env e@(AS_PostfixOP _info op a) = evalOpPostfix env op e a
 evalE env e@(AS_InfixOP _info op a b) = evalOpInfix env op e a b
 evalE env _e@(AS_Let _info units expr) =
     do{ env' <- foldM (\env u -> evalU env u >>= \v ->
-                         bind env (nameU u, v)
+                         return $ bind (unprimed $ nameU u, v) env
                       ) env (filterUnits units)
       ; evalET env' expr
       }
@@ -166,12 +188,14 @@ evalE env (AS_RecordFunction _info l) =
     foldM (\(VA_Rec map) (AS_MapTo (AS_Field k) e) -> evalET env e >>= \v ->
                 return $ VA_Rec $ Map.insert (VA_String k) v map)
           (VA_Rec Map.empty) l
-evalE env e@(AS_Quantified _info qkind [qbound] expr) = -- FIXME singleton!
+evalE env (AS_Quantified _info _qkind [] expr) = -- FIXME singleton!
+    evalE env expr
+evalE env e@(AS_Quantified _info qkind (qbound:qs) expr) = -- FIXME singleton!
     do{ let (AS_QBoundN [var] bexpr) = qbound
       ; elements <- enumElements env e bexpr
-      ; envs <- mapM (\v -> bind env (var, v)) elements
+      ; let envs = map (\v -> bind (unprimed var, v) env) elements
       ; bvs <- mapM (\env ->
-                 case evalET env expr of
+                 case evalET env (AS_Quantified _info qkind qs expr) of
                      Right (VA_Bool b) -> return $ VA_Bool b
                      Right other -> throwError $
                        IllegalType e expr other TY_Bool "quantifier"
@@ -187,16 +211,15 @@ evalE env e@(AS_Quantified _info qkind [qbound] expr) = -- FIXME singleton!
 evalE env e@(AS_QuantifierBoundFunction _info [qbound] expr) = --FIXME singleton!
     do{ let (AS_QBoundN [var] qexpr) = qbound
       ; elements <- enumElements env e qexpr
-      ; envs <- mapM (\v -> bind env (var, v) >>= \env' ->
-                        return (v, env')) elements
+      ; let envs = map (\v -> (v, bind (unprimed var, v) env)) elements
       ; foldM (\(VA_Map map) (argv,env) -> evalET env expr >>= \resv ->
                          return $ VA_Map $ Map.insert argv resv map
                     ) (VA_Map Map.empty) envs
       }
 evalE env e@(AS_Choose _info (AS_QBound1 qvar qexpr) bexpr) =
     do{ elements <- enumElements env e qexpr
-      ; v <- findM (\qvalue ->
-               bind env (qvar, qvalue) >>= \env' ->
+      ; v <- findM (\qvalue -> do
+                   let env' = bind (unprimed qvar, qvalue) env
                    case evalET env' bexpr of
                      Right (VA_Bool b) -> return b
                      Right other -> throwError $
@@ -228,8 +251,7 @@ evalE env (AS_RecordType _info l) =
           (VA_RecType Map.empty) l
 evalE env e@(AS_SetComprehension _info (AS_QBound1 qvar qexpr) expr) =
     do{ elements <- enumElements env e qexpr
-      ; envs <- mapM (\v -> bind env (qvar, v) >>= \env' ->
-                  return (v, env')) elements
+      ; let envs = map (\v -> (v, bind (unprimed qvar, v) env)) elements
       ; vs <- foldM (\acc (v, env) ->
                 evalET env expr >>= \bv ->
                     case bv of
@@ -243,7 +265,7 @@ evalE env e@(AS_SetComprehension _info (AS_QBound1 qvar qexpr) expr) =
       }
 evalE env e@(AS_SetGeneration _info expr (AS_QBound1 qvar qexpr)) =
     do{ elements <- enumElements env e qexpr
-      ; envs <- mapM (\v -> bind env (qvar, v)) elements
+      ; let envs = map (\v -> bind (primed qvar, v) env) elements
       ; vs <- mapM (\env -> evalET env expr >>= \v -> return v) envs
       ; return $ VA_Set $ Set.fromList vs
       }
@@ -316,54 +338,50 @@ evalOpInfix :: Env
 -- (e.g. Next = A \/ B), or at A and B and the \/ takes it from there?
 -- What is the right monad to combine these sets of values (a value being the
 -- record of all variables in the TLA+ spec).
-evalOpInfix env _op@AS_EQ _parent
-            (AS_PostfixOP _ AS_Prime a@(AS_Ident a'@(AS_Name _ [] _i))) b =
-    evalET env a >>= \case
-      (VA_Var _) -> do{ vb <- evalET env b
-                      ; env' <- replace env (a', vb)
-                      ; Trace.trace (ppEnv env') $ return vb
-                      }
-      _ -> error "unspecified"
-evalOpInfix env op@AS_EQ parent a@(AS_Ident a'@(AS_Name _ [] _i)) b =
-    evalET env a >>= \va -> case va of
-      (VA_Var _) -> do{ vb <- evalET env b
-                      ; env' <- replace env (a', vb)
-                      ; Trace.trace (ppEnv env') $ return vb
-                      }
-      _ ->
-        case va of
-          {-- In TLA+ r.a and r."a" (so is r["a"], but r[a] is not) are the
-          same if r is a record. All the quoted forms work well without
-          special handling, but in r.a, it's important to not
-          treat 'a' as an identifier (unbound) if r is a record.  Here
-          we handle the r.a case.  The r[a] case is different in that a is
-          treated as an identifier and hence needs no special handling. --}
-          (VA_Rec _m) -> eval_dot op (env, parent, a, b) va
-            -- FIXME, does TLA+ allow set comprehension over rec types?
-            --   LET B == {1,2} S == {[t: {"S1"}, b: B], [t: {"S2"}, b: B]}
-            --    IN { a.t : a \in S }
-          (VA_RecType _m) -> eval_dot op (env, parent, a, b) va
-          _ -> do{ vb <- evalET env b
-                         ; infix_op op (env, parent, a, b) va vb
-                         }
+-- evalOpInfix env _op@AS_EQ _parent
+--             (AS_PostfixOP _ AS_Prime a@(AS_Ident a'@(AS_Name _ [] _i))) b =
+--     evalET env a >>= \case
+--       (VA_Var _) -> do{ vb <- evalET env b
+--                       ; env' <- replace env (primed a', vb)
+--                       ; Trace.trace (ppEnv env') $ return vb
+--                       }
+--       e -> error $ "unspecified: " ++ show e
+-- evalOpInfix env op@AS_EQ parent a@(AS_Ident a'@(AS_Name _ [] _i)) b =
+--     evalET env a >>= \case
+--       (VA_Var _) -> do{ vb <- evalET env b
+--                       ; env' <- replace env (unprimed a', vb)
+--                       ; Trace.trace (ppEnv env') $ return vb
+--                       }
+--       {-- In TLA+ r.a and r."a" (so is r["a"], but r[a] is not) are the
+--       same if r is a record. All the quoted forms work well without
+--       special handling, but in r.a, it's important to not
+--       treat 'a' as an identifier (unbound) if r is a record.  Here
+--       we handle the r.a case.  The r[a] case is different in that a is
+--       treated as an identifier and hence needs no special handling. --}
+--       va@(VA_Rec _m) -> eval_dot op (env, parent, a, b) va
+--         -- FIXME, does TLA+ allow set comprehension over rec types?
+--         --   LET B == {1,2} S == {[t: {"S1"}, b: B], [t: {"S2"}, b: B]}
+--         --    IN { a.t : a \in S }
+--       va@(VA_RecType _m) -> eval_dot op (env, parent, a, b) va
+--       va -> do{ vb <- evalET env b
+--               ; infix_op op (env, parent, a, b) va vb
+--               }
 evalOpInfix env op parent a b =
-  do{ va <- evalET env a
-    ; case va of
+  evalET env a >>= \case
         {-- In TLA+ r.a and r."a" (so is r["a"], but r[a] is not) are the
         same if r is a record. All the quoted forms work well without
         special handling, but in r.a, it's important to not
         treat 'a' as an identifier (unbound) if r is a record.  Here
         we handle the r.a case.  The r[a] case is different in that a is
         treated as an identifier and hence needs no special handling. --}
-        (VA_Rec _m) -> eval_dot op (env, parent, a, b) va
+        va@(VA_Rec _m) -> eval_dot op (env, parent, a, b) va
           -- FIXME, does TLA+ allow set comprehension over rec types?
           --   LET B == {1,2} S == {[t: {"S1"}, b: B], [t: {"S2"}, b: B]}
           --    IN { a.t : a \in S }
-        (VA_RecType _m) -> eval_dot op (env, parent, a, b) va
-        _ -> do{ vb <- evalET env b
-                       ; infix_op op (env, parent, a, b) va vb
-                       }
-    }
+        va@(VA_RecType _m) -> eval_dot op (env, parent, a, b) va
+        va -> do{ vb <- evalET env b
+                ; infix_op op (env, parent, a, b) va vb
+                }
 
 infix_op :: AS_InfixOp -> Infix_Info ->
             VA_Value -> VA_Value -> ThrowsError VA_Value
@@ -622,8 +640,8 @@ op_funapp i va argv@(VA_FunArgList argvaluelist) =
          --       factorial[n \in Nat] == IF n = 0 THEN 1 ELSE n * factorial[n-1]
          --    IN factorial[3]
          -- TODO: should emit a warning to the user when new bindings shadow old ones.
-         ; envir' <- foldM (\env (n,v) -> bind env (n,v)) env
-                           (zip argnames argvaluelist)
+         ; let envir' = List.foldr (\(n,v) env -> bind (n,v) env) env
+                           (zip (map unprimed argnames) argvaluelist)
          ; mapM_ (\(AS_QBoundN [i] range) ->
              do{ let qe = AS_InfixOP _info AS_In (AS_Ident i) range
                ; evalET envir' qe >>= \r ->
@@ -726,8 +744,8 @@ evalOperator(env, argnames, exprargs, expr) =
        then evalET env expr
        else if length argnames == length exprargs
             then do{ exprargvalues <- mapM (evalET env) exprargs
-                   ; env' <- foldM (\env (n,v) -> bind env (n,v))
-                                   env (zip argnames exprargvalues)
+                   ; let env' = foldl (\env (n,v) -> bind (n,v) env)
+                                   env (zip (map unprimed argnames) exprargvalues)
                    ; evalET env' expr
                    }
             else throwError $
@@ -838,7 +856,7 @@ ppError (IllegalType parentE condE condV expectedType detail) =
            <++> text "at" <+> (text $ ppLocE parentE)
 ppError (NameNotInScope ident kind) =
     pp $ nest 4 $ (text $ ppLocE $ AS_Ident ident) <//> text ":"
-           <++> text kind <+> dquotes (ppE $ AS_Ident ident) <+>
+           <++> text kind <+> dquotes (ppName ident) <+>
                text "not in scope."
 ppError (NameAlreadyBound ident v kind) =
     pp $ nest 4 $ (text $ ppLocE ident) <//> text ":"
@@ -900,37 +918,42 @@ extractValue :: HasCallStack => ThrowsError a -> a
 extractValue (Right val) = val
 extractValue (Left msg) = error $ show msg
 
-------------------
--- ENV HANDLING --
-------------------
-type Env = [Binding] -- one env per module
-
-type Id = ([String], String)
-type Binding = (Id, VA_Value) -- add module qualifiers
-
 mkEmptyEnv :: [a]
 mkEmptyEnv = []
 
-bind :: Env -> (AS_Name, VA_Value) -> ThrowsError Env
-bind env (name, expr) = return $ (toId name, expr) : env
+primeVar :: Env -> Env
+primeVar env = mapMaybe (_1 $ preview unprime) env ++ filter (is _Unprimed . fst) env
 
-replace :: Env -> (AS_Name, VA_Value) -> ThrowsError Env
+bind :: (Id, VA_Value) -> Env -> Env
+bind (name, expr) env = (name, expr) : env
+
+replace :: Env -> (Id, VA_Value) -> ThrowsError Env
 replace env (name, expr) =
-  let env' = map (\(n,e) -> if n == toId name then (n, expr) else (n, e)) env
+  let env' = map (\(n,e) -> if n == name then (n, expr) else (n, e)) env
    in return env'
 
 lookupBinding :: AS_Name -> Env -> String -> ThrowsError VA_Value
 lookupBinding i env kind =
-    case lookup (toId i) env of
+    case lookup (unprimed i) env of
       Just expr -> return $ expr
       Nothing -> throwError $ NameNotInScope i kind
 
-toId :: AS_Name -> Id
-toId (AS_Name _info qual name) = (qual, name)
+-- toId :: AS_Name -> Id
+-- toId (AS_Name _info qual name) = (qual, name)
+unprimed :: AS_Name -> Id
+unprimed (AS_Name _info qual name) = Unprimed qual name
+
+primed :: AS_Name -> Id
+primed (AS_Name _info qual name) = Primed qual name
+
+unprime :: Fold Id Id
+unprime = _Primed . re _Unprimed
 
 ppId :: Id -> Doc
-ppId (quallist, name) =
+ppId (Unprimed quallist name) =
     let l = map text $ quallist++[name] in cat $ punctuate (text "!") l
+ppId (Primed quallist name) =
+    let l = map text $ quallist++[name] in cat $ punctuate (text "!") $ l ++ [char '\'']
 
 ppEnv :: Env -> String
 ppEnv env =
@@ -938,14 +961,14 @@ ppEnv env =
          <++> vcat (map (\(id, v) ->
                    ppId id <+> text "==>" <+> ppVA v) env))
 
-addBuiltIn :: Env -> ThrowsError Env
-addBuiltIn e =
-    bind e (bif "TLA+" "BOOLEAN" []) >>= \e ->
-    bind e (bif "FiniteSet" "Cardinality" ["S"]) >>= \e ->
-    bind e (bif "Sequences" "Seq" ["S"]) >>= \e ->
-    bind e (bif "TLC" "Assert" ["val", "out"]) >>= \e ->
-    bind e (bif "TLC" "Print" ["out", "val"]) >>= \e ->
-    bind e (bif "SPECIFICA" "TypeOf" ["val"])
+addBuiltIn :: Env -> Env
+addBuiltIn =
+    bind (bif "TLA+" "BOOLEAN" []) .
+    bind (bif "FiniteSet" "Cardinality" ["S"]) .
+    bind (bif "Sequences" "Seq" ["S"]) .
+    bind (bif "TLC" "Assert" ["val", "out"]) .
+    bind (bif "TLC" "Print" ["out", "val"])  .
+    bind (bif "SPECIFICA" "TypeOf" ["val"])
   where
     bif mod name args = (mk_Ident' name,
                          VA_OperatorDef mkInfoE

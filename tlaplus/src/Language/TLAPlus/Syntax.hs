@@ -1,14 +1,19 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Language.TLAPlus.Syntax where
 
+import Control.Applicative
 import Control.Lens
 import Control.Monad
 
+import Data.Monoid
+import Data.MonoTraversable
 import Data.Bitraversable
 import Data.Map as Map hiding (map)
+import Data.Maybe
 import Data.Set as Set hiding (map)
 import Data.Generics
 
@@ -103,6 +108,55 @@ data AS_Expression =
         -- expression tree. AS_CloseFunApp thus never appears in a correct AST
       | AS_CloseFunApp -- the ] in a f[a,b] construct
         deriving (Eq, Ord, Show, Data, Typeable, Lift)
+
+type instance Element AS_Expression = AS_Expression
+
+mapExpr_aux :: Data a => Maybe (a :~: AS_Expression)
+            -> (AS_Expression -> AS_Expression) -> a -> a
+mapExpr_aux (Just Refl) f = f
+mapExpr_aux Nothing f = gmapT $ \x -> mapExpr_aux eqT f x
+
+foldExpr_aux :: (Data a,Monoid m) => Maybe (a :~: AS_Expression)
+             -> (AS_Expression -> m) -> a -> m
+foldExpr_aux (Just Refl) f = f
+foldExpr_aux Nothing f = mconcat . gmapQ (\x -> foldExpr_aux eqT f x)
+
+foldlExpr_aux :: forall a mono. (Data mono)
+              => Maybe (mono :~: AS_Expression)
+              -> (a -> AS_Expression -> a) -> a -> mono -> a
+foldlExpr_aux (Just Refl) f x = f x
+foldlExpr_aux Nothing f x = getConst . gfoldl
+                              (\(Const i) -> Const . foldlExpr_aux eqT f i)
+                              (\_ -> Const x)
+
+foldlExpr :: (a -> AS_Expression -> a) -> a -> AS_Expression -> a
+foldlExpr f x = getConst . gfoldl
+                              (\(Const i) -> Const . foldlExpr_aux eqT f i)
+                              (\_ -> Const x)
+
+gmapA :: forall m a. (Data a, Applicative m) => (forall d. Data d => d -> m d) -> a -> m a
+gmapA f = gfoldl k pure
+  where
+    k :: Data d => m (d -> b) -> d -> m b
+    k c x = c <*> f x
+
+traverseExpr_aux :: (Data a,Applicative m) => Maybe (a :~: AS_Expression)
+                 -> (AS_Expression -> m AS_Expression) -> a -> m a
+traverseExpr_aux (Just Refl) f = f
+traverseExpr_aux Nothing f = gmapA $ \x -> traverseExpr_aux eqT f x
+
+instance MonoFunctor AS_Expression where
+    omap f = gmapT $ \x -> mapExpr_aux eqT f x
+
+instance MonoFoldable AS_Expression where
+    ofoldMap f = mconcat . gmapQ (\x -> foldExpr_aux eqT f x)
+    ofoldr f r e = appEndo (ofoldMap (Endo . f) e) r
+    ofoldl' = foldlExpr
+    ofoldr1Ex f  = fromJust . ofoldr (\x y -> (f x <$> y) <|> Just x)  Nothing
+    ofoldl1Ex' f = fromJust . ofoldl' (\x y -> (f <$> x <*> pure y) <|> Just y) Nothing
+
+instance MonoTraversable AS_Expression where
+    otraverse f = gmapA $ \x -> traverseExpr_aux eqT f x
 
 data AS_Field = AS_Field String deriving (Eq, Ord, Show, Data, Typeable, Lift)
 

@@ -92,8 +92,8 @@ wrapStateFun globalenv (VA_FunctionDef _info _head _qbounds expr) =
     -- FIXME must enforce qbounds!
     \state ->
       let va_state = convertEtoVA state -- record
-       in case bind globalenv (mk_Ident' "transition", va_state) >>= \env ->
-            evalE env expr of
+          env = bind (mk_Ident' "transition", va_state) globalenv
+       in case evalE env expr of
               Right (VA_Rec m) ->
                   let label = extractElem m "label" Label
                       labelfont = extractElem m "font" LabelFont
@@ -118,8 +118,8 @@ wrapSLAFun globalenv (VA_FunctionDef _info _head _qbounds expr) =
                                          (VA_String "state", convertEtoVA e)])
                            statelist
           -- FIXME create a record [state_idx: Int, state: State]
-       in case bind globalenv (mk_Ident' "states", va_statelist) >>= \env ->
-            evalE env expr of
+          env = bind (mk_Ident' "states", va_statelist) globalenv
+      in case evalE env expr of
               Right (VA_Set recset) ->
                 let l = concatMap
                         (\r -> case r of

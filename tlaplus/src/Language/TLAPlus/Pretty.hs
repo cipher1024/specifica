@@ -1,6 +1,6 @@
 module Language.TLAPlus.Pretty
   ( prettyPrintAS, ppE, prettyPrintE,
-    ppUnit,
+    ppName, ppUnit,
     prettyPrintVA, ppVA, prettyPrintVATeX,
     prettyPrintCFG, ppCFG_Value,
     (<++>)) where

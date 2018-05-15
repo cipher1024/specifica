@@ -10,6 +10,8 @@ import Data.Char
 import Data.List
 import Data.Maybe
 
+import GHC.Generics (Generic)
+
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Language.TLAPlus.Eval
@@ -31,13 +33,24 @@ tlaImportSpec fp = do
     forM_ (extendedMod (extendDecl spec) \\ ["TLC","Naturals"]) $
         fail "'Extend' not supported"
     let spec' = spec { name = name spec & _head %~ toUpper }
+    (_,initDef) <- lookupDef spec "Init"
+    (_,nextDef) <- lookupDef spec "Next"
     concat <$> sequence
-        [ pure <$> specStateRec spec'
-        , initSpec spec' ]
+        [ specDef (mkName $ "init" ++ name spec' ++ "Def") initDef
+        , specDef (mkName $ "next" ++ name spec' ++ "Def") nextDef
+        , wholeSpecDef (mkName $ name spec ++ "Spec") spec' ]
+
+specDef :: Name -> AS_Expression -> DecsQ
+specDef n e = sequence [ sigD n [t| AS_Expression |]
+                       , valD (varP n) (normalB $ lift e) [] ]
+
+wholeSpecDef :: Name -> AS_Spec -> DecsQ
+wholeSpecDef n e = sequence [ sigD n [t| AS_Spec |]
+                       , valD (varP n) (normalB $ lift e) [] ]
 
 specStateRec :: AS_Spec -> DecQ
 specStateRec spec = do
-    t <- sequence [ [t|Show|], [t|Eq|] ]
+    t <- sequence [ [t|Show|], [t|Eq|], [t|Generic|] ]
     let n = stateRec spec
         der = DerivClause Nothing <$> [ t ]
     con <- RecC n <$> mapM mkVar (variables spec)
@@ -65,6 +78,8 @@ initValues vs e (AS_InfixOP _ AS_AND x y) = (++) <$> initValues vs e x <*> initV
 initValues vs e (AS_InfixOP _ AS_EQ (AS_Ident (AS_Name _ [] x)) y)
     | mkName x `elem` vs = pure . (mkName x, ) <$> [| evalE $(pure e) $(lift y) |]
 initValues _ _ _ = pure []
+
+type Action = ([Exp],[(Name,Exp)])
 
 stateRec :: AS_Spec -> Name
 stateRec spec = mkName (name spec ++ "_State")

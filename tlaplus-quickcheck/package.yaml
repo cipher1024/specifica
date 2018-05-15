@@ -8,14 +8,19 @@ ghc-options:
 
 default-extensions:
   - TupleSections
+  - TypeApplications
+  - DeriveGeneric
 
 library:
   source-dirs: src
   dependencies:
     - base
-    - template-haskell
-    - tlaplus
+    - containers
+    - dlist
     - lens
+    - template-haskell
+    - text
+    - tlaplus
     - tlaplus-eval
 
 tests:
@@ -24,10 +29,12 @@ tests:
     source-dirs:         test
     dependencies:
       - base
-      - tlaplus
-      - parsec >= 3.0.1
-      - template-haskell
+      - containers
       - hspec
       - lens
+      - parsec >= 3.0.1
+      - template-haskell
+      - text
+      - tlaplus
+      - tlaplus-eval
       - tlaplus-quickcheck
-      - containers
